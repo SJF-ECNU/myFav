@@ -1,0 +1,33 @@
+name: Container smoke test
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t myfav:test .
+      - name: Application tests
+        run: docker run --rm -v "$PWD/test:/app/test:ro" myfav:test npm test
+      - name: Headless and virtual-screen browser
+        run: |
+          docker run --rm --shm-size=1g myfav:test node --input-type=module -e 'import {launch} from "cloakbrowser"; const b=await launch({headless:true}); const p=await b.newPage(); await p.goto("data:text/html,<title>myFav</title>"); if(await p.title()!=="myFav")throw Error("title"); await b.close();'
+          docker run --rm --shm-size=1g myfav:test sh -c 'Xvfb :99 -screen 0 1366x768x24 -nolisten tcp & sleep 2; node --input-type=module -e '\''import {launch} from "cloakbrowser"; const b=await launch({headless:false}); const p=await b.newPage(); await p.goto("data:text/html,<title>myFav headed</title>"); if(await p.title()!=="myFav headed")throw Error("title"); await b.close();'\'''
+      - name: Temporary remote login window
+        run: |
+          docker run -d --init --name login-check --shm-size=1g -p 127.0.0.1:6080:6080 myfav:test login bilibili
+          curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:6080/vnc.html -o /tmp/vnc.html
+          grep -q noVNC /tmp/vnc.html
+          docker exec login-check python -c 'import socket; s=socket.create_connection(("127.0.0.1",5900)); assert s.recv(12).startswith(b"RFB "); print("VNC server verified")'
+          docker stop login-check
+          docker rm login-check
+      - name: CPU audio transcription
+        run: |
+          curl -fL https://raw.githubusercontent.com/openai/whisper/main/tests/jfk.flac -o /tmp/jfk.flac
+          docker run --rm -v /tmp/jfk.flac:/tmp/jfk.flac:ro myfav:test sh -c 'ffmpeg -nostdin -loglevel error -i /tmp/jfk.flac -ac 1 -ar 16000 /tmp/audio.wav && whisper /tmp/audio.wav --model tiny --device cpu --fp16 False --verbose False --output_format json --output_dir /tmp && python -c '\''import json; d=json.load(open("/tmp/audio.json")); assert "country" in d["text"].lower(); print("CPU transcription verified")'\'''

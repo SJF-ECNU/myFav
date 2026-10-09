@@ -1,0 +1,31 @@
+services:
+  myfav:
+    build: .
+    image: myfav:local
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYFAV_HOST: 0.0.0.0
+      MYFAV_PORT: 8787
+    ports:
+      - "127.0.0.1:8787:8787"
+    shm_size: 1gb
+    volumes:
+      - data:/app/.local
+      - whisper-cache:/home/node/.cache/whisper
+  login:
+    image: myfav:local
+    profiles: [login]
+    init: true
+    env_file: .env
+    command: [login, bilibili]
+    ports:
+      - "127.0.0.1:6080:6080"
+    shm_size: 1gb
+    volumes:
+      - data:/app/.local
+      - whisper-cache:/home/node/.cache/whisper
+volumes:
+  data:
+  whisper-cache:

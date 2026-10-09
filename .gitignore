@@ -1,0 +1,12 @@
+node_modules/
+.local/
+.env
+*.log
+.DS_Store
+
+# Local agent history and machine-specific instructions
+project-memory/
+.agents/
+AGENTS.md
+.env.*
+!.env.example
