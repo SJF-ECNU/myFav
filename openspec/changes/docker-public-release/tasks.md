@@ -7,3 +7,5 @@
 
 ## 验证记录
 2026-10-09：Linux ARM64 镜像在本地构建成功；启动测试被本机 Docker 虚拟磁盘 I/O 故障阻断。GitHub Actions Linux x86_64 构建、19 项应用测试、无窗口/虚拟屏幕浏览器、noVNC 页面与 VNC 握手、公开样例音频 CPU 转写全部通过。验证运行：https://github.com/SJF-ECNU/myFav/actions/runs/37908134702 。没有真实服务器扫码或长期运行验证。公共仓库、MIT 和第三方引用已发布，凭证及私人工作记录未跟踪。
+
+后续本机复测：结束卡住的 Docker 后台并重新启动，健康接口恢复。旧镜像的入口文件为零字节（磁盘故障后产物）；不使用旧构建缓存重新构建后，ARM64 容器 19 项测试、浏览器、noVNC HTTP/VNC/WebSocket、六工具 HTTP MCP 与 list_updates、FFmpeg + Whisper base 公开样例 CPU 转写全部通过。临时容器已清理，没有使用真实账号配置。

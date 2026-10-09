@@ -124,7 +124,7 @@ npm start
 
 ## 验证
 
-2026-10-09：[Linux x86_64 容器验证通过](https://github.com/SJF-ECNU/myFav/actions/runs/37908134702)，包括无屏幕浏览器、远程登录窗口入口及 CPU 转写。ARM64 镜像已构建，容器运行和真实服务器长期使用尚待验证。
+2026-10-09：[Linux x86_64 容器验证通过](https://github.com/SJF-ECNU/myFav/actions/runs/37908134702)，包括无屏幕浏览器、远程登录窗口入口及 CPU 转写。本机 Linux ARM64 容器也已通过 19 项测试、浏览器、noVNC WebSocket 连接、HTTP MCP 和 Whisper base CPU 转写验证。真实服务器扫码和长期使用尚待验证。
 
 `npm test` 覆盖平台隔离、分页、迁移、文本缓存及真实 MCP 协议。GitHub Actions 另外构建镜像，检查无窗口/虚拟屏幕浏览器、临时 noVNC/VNC 入口和公开样例音频 CPU 转写。自动化不使用任何用户登录态，不能代替各平台真实账号或长期服务器运行验证。
 
