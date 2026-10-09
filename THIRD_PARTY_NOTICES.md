@@ -10,6 +10,7 @@ myFav's original code is MIT licensed. Dependencies, browser binaries, models an
 | [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) | MCP transport and tools | MIT |
 | [Express](https://github.com/expressjs/express) | HTTP server | MIT |
 | [Playwright](https://github.com/microsoft/playwright) | Browser control | Apache-2.0 |
+| [jose](https://github.com/panva/jose) | OAuth JWT signature and claims verification | MIT |
 | [Zod](https://github.com/colinhacks/zod) | Tool schema validation | MIT |
 
 Full direct dependency license texts are preserved in [third-party/licenses](third-party/licenses). Installed versions and npm dependency license metadata are listed in [npm-dependencies.json](third-party/npm-dependencies.json); npm packages in the image retain their original notices.
@@ -26,6 +27,10 @@ Full direct dependency license texts are preserved in [third-party/licenses](thi
 - [Node.js](https://github.com/nodejs/node) and Debian packages retain their bundled notices.
 
 Python distribution notices remain in `/opt/whisper/lib/python*/site-packages`; Debian copyright files remain in `/usr/share/doc/<package>/copyright`. Debian package source is available from [Debian Sources](https://sources.debian.org/) using the installed version (`dpkg-query -W`); browser provenance is available from CloakBrowser releases. Distributing an image requires preserving applicable notices and satisfying each included component's distribution terms.
+
+## Optional authorization service
+
+The OAuth deployment example uses [Keycloak](https://github.com/keycloak/keycloak) (Apache-2.0) and [PostgreSQL](https://www.postgresql.org/about/licence/) (PostgreSQL License). These run in separate upstream images, which retain their own notices; they are not included in the myFav image.
 
 ## Research references (not bundled dependencies)
 

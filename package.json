@@ -15,12 +15,14 @@
     "douyin:login": "node --env-file-if-exists=.env src/douyin-login.js login",
     "douyin:status": "node --env-file-if-exists=.env src/douyin-login.js status",
     "xiaohongshu:login": "node --env-file-if-exists=.env src/xiaohongshu-login.js login",
-    "xiaohongshu:status": "node --env-file-if-exists=.env src/xiaohongshu-login.js status"
+    "xiaohongshu:status": "node --env-file-if-exists=.env src/xiaohongshu-login.js status",
+    "agents": "node --env-file-if-exists=.env src/agents-cli.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "cloakbrowser": "^0.6.0",
     "express": "^5.2.1",
+    "jose": "^6.2.12",
     "playwright-core": "^1.64.0",
     "zod": "^4.6.5"
   },

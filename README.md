@@ -7,7 +7,7 @@
 - 三平台分别配置收藏夹，默认只读取 `myFav`（小红书为同名专辑）。
 - SQLite 保存收藏、增量事件、内容、处理状态和 Agent 结果。
 - 优先平台字幕；没有字幕时使用 FFmpeg + Whisper CPU 转写。
-- 统一六个 MCP 工具，Streamable HTTP + Bearer Token 认证。
+- 统一六个 MCP 工具，Streamable HTTP + 独立 Agent Token / OAuth 2.1 鉴权。
 - Docker 持久化部署，无屏幕服务器通过临时 noVNC 浏览器扫码登录。
 
 Agent 负责定时调用同步、判断内容、执行项目和写回结果。本服务不负责唤醒或执行项目。文本提取不包含图片、视频画面的理解。网站接口和登录态可能变化；首次转写需要时间，不能保证收藏后立即完成。
@@ -76,7 +76,38 @@ docker compose logs -f myfav
 }
 ```
 
-具体配置字段以所用 Agent 客户端为准。访问远程服务器可再建 `ssh -N -L 8787:127.0.0.1:8787 user@your-server` 隧道。通过 HTTPS 反向代理公开服务时，为实际域名配置 `MYFAV_ALLOWED_HOSTS`；浏览器客户端还需配置准确的 `MYFAV_ALLOWED_ORIGINS`。默认端口仅绑定主机回环，不提供 OAuth 自动发现。
+具体配置字段以所用 Agent 客户端为准。访问远程服务器可再建 `ssh -N -L 8787:127.0.0.1:8787 user@your-server` 隧道。通过 HTTPS 反向代理公开服务时，为实际域名配置 `MYFAV_ALLOWED_HOSTS`；浏览器客户端还需配置准确的 `MYFAV_ALLOWED_ORIGINS`。默认端口仅绑定主机回环。OAuth 2.1 配置与 Keycloak 示例见 [OAuth 接入手册](docs/oauth/README.md)。
+
+### 每个 Agent 独立凭据与权限
+
+推荐为每个 Agent 单独创建凭据，不再共享 `MYFAV_TOKEN`：
+
+```sh
+npm run agents -- create reader read
+npm run agents -- create worker read,prepare,write
+npm run agents -- list
+npm run agents -- scopes worker read,prepare
+npm run agents -- rotate worker
+npm run agents -- revoke reader
+npm run agents -- audit 100
+# Docker 中使用 docker compose exec myfav npm run agents -- <命令>
+```
+
+创建/轮换只输出凭据文件路径：`.local/credentials/<id>.token`，文件权限为 `0600`，不把值写到日志。将该文件的值配置为对应 Agent 的 Bearer Token。注册第一个 Agent 后旧 `MYFAV_TOKEN` 永久停止接受；启用 OAuth 时也停止接受旧共享 Token。API Token 和已绑定的 OAuth Agent 可同时使用。
+
+| 权限 | 工具与行为 |
+| --- | --- |
+| `read` | `list_updates`、`get_result`、`get_content`；内容只读取缓存，不启动浏览器、预取或转写 |
+| `prepare` | `sync_favorites`；同时拥有 `read` 时，`get_content` 可获取和准备内容 |
+| `write` | `set_processing_status`、`save_result` |
+
+权限按请求生效；撤销/轮换后下一次请求拒绝旧凭据，已经执行的工作继续完成。准备任务全服务同时只允许一个批次，包括它启动的后台预取与转写；忙时同步返回可重试错误，缓存读取仍可使用。限流按独立 Agent ID 计算，超限 HTTP 429 带 `Retry-After`，计数保存在单进程内存中，重启会重置。
+
+审计仅保留最近 10,000 条时间、Agent 别名、已知方法/工具、结果及 HTTP 状态，不保存请求参数、收藏正文、结果正文或凭据。API 凭据在服务器 SQLite 中以原值保存，数据库文件权限 `0600`；备份和数据卷也需要保持私有。公开部署需要 HTTPS、精确 Host/Origin 配置和代理层匿名请求限流。
+
+### OAuth 2.1
+
+支持 MCP 资源发现、签名/issuer/audience/过期时间校验、工具 scope 和本地客户端＋用户绑定。授权码、强制 PKCE S256、登录和刷新由外部授权服务负责；[通用接入及 Keycloak 部署示例](docs/oauth/README.md)提供具体配置。服务未配置公开域名和授权服务时，不能直接使用 OAuth 登录。
 
 | 工具 | 用途 |
 | --- | --- |
@@ -120,7 +151,11 @@ MYFAV_CDP_URL=http://127.0.0.1:9222
 | `MYFAV_BROWSER` | `cloakbrowser` / `chromium` / `cdp` |
 | `MYFAV_BROWSER_EXECUTABLE_PATH` | chromium 模式的浏览器路径 |
 | `MYFAV_CDP_URL` | cdp 模式的外部浏览器端点 |
-| `MYFAV_TOKEN` | 必填，至少 32 字符随机值 |
+| `MYFAV_TOKEN` | 兼容旧配置；未注册 Agent 且未启用 OAuth 时使用，至少 32 字符 |
+| `MYFAV_RATE_LIMIT_PER_MINUTE` | 每 Agent 每分钟 HTTP 请求上限，默认 `60` |
+| `MYFAV_OAUTH_ISSUER` / `MYFAV_OAUTH_RESOURCE` | 授权服务 issuer 与公开 MCP HTTPS 地址；一起配置启用 OAuth |
+| `MYFAV_OAUTH_INTROSPECTION_URL` | 可选；不透明令牌的 introspection 地址，留空使用 JWT/JWKS |
+| `MYFAV_OAUTH_CLIENT_ID` / `MYFAV_OAUTH_CLIENT_SECRET` | introspection 的服务端机密凭据 |
 | `MYFAV_FOLDER` | Bilibili 收藏夹，`myFav` |
 | `MYFAV_DOUYIN_FOLDER` | 抖音收藏夹，`myFav` |
 | `MYFAV_XIAOHONGSHU_FOLDER` | 小红书专辑，`myFav` |
@@ -150,6 +185,8 @@ npm start
 复制并填写 `.env.example` 后启动。CloakBrowser 首次运行会下载对应系统的浏览器。架构见 [docs/architecture.md](docs/architecture.md)，平台调研见 [docs/research](docs/research)，变更规划见 [openspec/changes](openspec/changes)。
 
 ## 验证
+
+28 项自动测试已通过；鉴权测试验证独立凭据、权限交集、撤销与轮换、限流、准备批次限制、无敏感正文审计，以及 OAuth 的发现和无效令牌拒绝。`scripts/oauth-smoke.js` 已用真实 Keycloak 验证授权码、PKCE S256、刷新轮换及无效授权拒绝；具体 Agent 平台及公网部署需分别验证。
 
 浏览器兼容变更已通过 23 项自动测试，以及真实 Google Chrome 和 Docker 中的指定路径/CDP 集成测试；验证持久 Cookie、共享登录态与原有页面保留。[Linux x86_64 容器 CI 也已通过](https://github.com/SJF-ECNU/myFav/actions/runs/37918351557)。尚未验证具体云浏览器服务的 CDP 接口。
 

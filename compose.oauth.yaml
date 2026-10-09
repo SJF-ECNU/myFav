@@ -1,0 +1,37 @@
+# Merge with compose.yaml. Both public domains require an HTTPS reverse proxy.
+services:
+  oauth-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${MYFAV_OAUTH_DB_PASSWORD:?Set a private database password}
+    volumes:
+      - oauth-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  oauth:
+    image: quay.io/keycloak/keycloak:26.8.0
+    restart: unless-stopped
+    command: [start, --http-enabled=true, --proxy-headers=xforwarded, --import-realm]
+    environment:
+      KC_HOSTNAME: ${MYFAV_OAUTH_PUBLIC_URL:?Set the public HTTPS authorization service URL}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://oauth-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${MYFAV_OAUTH_DB_PASSWORD:?Set a private database password}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${MYFAV_OAUTH_ADMIN_USERNAME:?Set an admin username}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${MYFAV_OAUTH_ADMIN_PASSWORD:?Set a private admin password}
+    depends_on:
+      oauth-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./docs/oauth/keycloak-realm.example.json:/opt/keycloak/data/import/myfav.json:ro
+volumes:
+  oauth-db:

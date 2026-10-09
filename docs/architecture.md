@@ -77,3 +77,9 @@ Docker 使用 Node 24 Debian、CPU Whisper 和非 root 用户。Compose 数据�
 src/browser-session.js 为三平台登录和服务提供 openSession，返回 context/page/close。默认 CloakBrowser 保持平台独立持久目录；chromium 使用配置的 executablePath；cdp 使用 Playwright connectOverCDP 默认上下文并新建工作页。调用方统一调用 close，CDP 不调用共享 context.close，而只关闭工作页后断开浏览器连接。使用 noDefaults 避免连接时更改已有上下文默认行为。
 
 外部浏览器登录态与用户数据由提供方持久化；myFav 不导出 Cookie。自启动模式和 CLI 读取同一 .env 配置，连接错误不输出端点或启动原始详情。高级功能与版本仍需逐一验证，不支持工具专用且无 CDP 的云浏览器。
+
+## Agent 接入鉴权
+
+`src/access.js` 在独立私有 SQLite 中保存 Agent 凭据、OAuth 身份绑定及仅元数据审计。`src/mcp.js` 按每次请求过滤工具并执行 read/prepare/write 检查；只读内容通过 `cachedContent` 读取缓存。按 Agent 限流，准备批次占用延续到后台队列 drain 完成。管理通过本机 `src/agents-cli.js`，不暴露远程管理工具。
+
+`src/oauth.js` 负责公开 MCP 资源发现以及 JWT/JWKS 或不透明令牌 introspection。OAuth 授权服务负责登录、强制 PKCE S256、授权码及刷新；本地权限与访问令牌 scope 取交集。所有 Agent 仍共享单用户收藏库。部署说明见 [OAuth 手册](oauth/README.md)。

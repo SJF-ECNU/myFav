@@ -34,3 +34,10 @@ jobs:
         run: |
           curl -fL https://raw.githubusercontent.com/openai/whisper/main/tests/jfk.flac -o /tmp/jfk.flac
           docker run --rm -v /tmp/jfk.flac:/tmp/jfk.flac:ro myfav:test sh -c 'ffmpeg -nostdin -loglevel error -i /tmp/jfk.flac -ac 1 -ar 16000 /tmp/audio.wav && whisper /tmp/audio.wav --model tiny --device cpu --fp16 False --verbose False --output_format json --output_dir /tmp && python -c '\''import json; d=json.load(open("/tmp/audio.json")); assert "country" in d["text"].lower(); print("CPU transcription verified")'\'''
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: OAuth authorization-code and PKCE integration
+        run: |
+          npm ci --ignore-scripts
+          node scripts/oauth-smoke.js

@@ -1,3 +1,5 @@
+import { Access } from './access.js';
+import { createOAuth } from './oauth.js';
 import { Store } from './store.js';
 import { XiaohongshuService } from './xiaohongshu-service.js';
 import { DouyinService } from './douyin-service.js';
@@ -18,8 +20,10 @@ const service = new PlatformService(store, {
   douyin: new DouyinService(store, process.env.MYFAV_DOUYIN_FOLDER || 'myFav'),
   xiaohongshu: new XiaohongshuService(store, process.env.MYFAV_XIAOHONGSHU_FOLDER || 'myFav'),
 });
-const app = createApp(service, { token, allowedHosts, allowedOrigins });
+const access = new Access(resolve('.local/access.sqlite'));
+const oauth = await createOAuth();
+const app = createApp(service, { token, access, oauth, allowedHosts, allowedOrigins, rateLimit: Number(process.env.MYFAV_RATE_LIMIT_PER_MINUTE || 60) });
 const listener = app.listen(port, host, () => console.log(`myFav MCP 已启动：http://${host}:${port}/mcp。喵～`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
-  listener.close(async () => { await service.drain(); store.close(); });
+  listener.close(async () => { await service.drain(); store.close(); access.close(); });
 });
