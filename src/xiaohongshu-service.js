@@ -1,4 +1,4 @@
-import { FavoriteService } from './service.js';
+import { FavoriteService, transcriptionFailureReason } from './service.js';
 import { openXiaohongshu, collectXiaohongshu, readXhsNote, resolveXhsMedia } from './xiaohongshu.js';
 import { transcribeAudio } from './transcribe.js';
 
@@ -45,7 +45,7 @@ export class XiaohongshuService extends FavoriteService {
     if (cached) { delete part.reason; part.subtitles = cached.segments; part.source = 'local_whisper'; part.language = cached.language; part.status = 'available'; }
     else {
       const key = `${id}:1`;
-      if (!this.jobs.has(key)) this.startTranscription(item, 1, key);
+      if (!this.jobs.has(key) || this.jobs.get(key).status === 'transcription_failed') this.startTranscription(item, 1, key);
       delete part.reason;
       Object.assign(part, this.jobs.get(key));
     }
@@ -61,10 +61,10 @@ export class XiaohongshuService extends FavoriteService {
         const note = await readXhsNote(page, this.store.source(item.itemId), item);
         return resolveXhsMedia(note.mediaUrl);
       });
-      this.store.saveTranscript(item.itemId, cid, await this.transcribe(url)); job.status = 'available';
+      this.store.saveTranscript(item.itemId, cid, await this.transcribe(url)); job.status = 'available'; this.jobs.delete(key);
     }).catch(error => {
       job.status = 'transcription_failed';
-      job.reason = /^本地转写失败：/.test(error.message) ? error.message.split('\n')[0] : '小红书原视频或转写当前不可用';
+      job.reason = transcriptionFailureReason(error);
     });
   }
 }

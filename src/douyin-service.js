@@ -1,4 +1,4 @@
-import { FavoriteService } from './service.js';
+import { FavoriteService, transcriptionFailureReason } from './service.js';
 import { openDouyin, douyinApi, collectDouyin } from './douyin.js';
 import { transcribeAudio, validateAudioUrl } from './transcribe.js';
 
@@ -64,10 +64,12 @@ export class DouyinService extends FavoriteService {
     this.store.saveContent(id, content);
     const part = content.parts[0], cached = this.store.transcript(id, 1);
     if (part.status !== 'available') {
-      if (cached) { part.subtitles = cached.segments; part.language = cached.language; part.source = 'local_whisper'; part.status = 'available'; }
+      if (cached) {
+        delete part.reason; part.subtitles = cached.segments; part.language = cached.language; part.source = 'local_whisper'; part.status = 'available'; }
       else {
         const key = `${id}:1`;
-        if (!this.jobs.has(key)) this.startTranscription(item, 1, key);
+        delete part.reason;
+        if (!this.jobs.has(key) || this.jobs.get(key).status === 'transcription_failed') this.startTranscription(item, 1, key);
         Object.assign(part, this.jobs.get(key));
       }
     }
@@ -87,10 +89,10 @@ export class DouyinService extends FavoriteService {
         if (!url) throw new Error('抖音无可读取的原视频音轨');
         return url;
       });
-      this.store.saveTranscript(item.itemId, cid, await this.transcribe(url)); job.status = 'available';
+      this.store.saveTranscript(item.itemId, cid, await this.transcribe(url)); job.status = 'available'; this.jobs.delete(key);
     }).catch(error => {
       job.status = 'transcription_failed';
-      job.reason = /^本地转写失败：/.test(error.message) ? error.message.split('\n')[0] : '抖音视频音轨或转写当前不可用';
+      job.reason = transcriptionFailureReason(error);
     });
   }
 }

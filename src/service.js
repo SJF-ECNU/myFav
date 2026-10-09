@@ -2,6 +2,12 @@ import { openBrowser, browserApi } from './browser.js';
 import { collectFavorites } from './favorites.js';
 import { transcribeAudio, validateAudioUrl } from './transcribe.js';
 
+export function transcriptionFailureReason(error) {
+  return String(error?.message || '音轨或转写当前不可用').split('\n')[0]
+    .replace(/https?:\/\/[^\s]+/g, '[媒体地址]')
+    .replace(/(token|sign|cookie|authorization|password)(\s*[:=]\s*)[^\s,;]+/gi, '$1$2[已隐藏]');
+}
+
 export function validateSubtitleUrl(value) {
   const url = new URL(value.startsWith('//') ? `https:${value}` : value);
   if (url.protocol !== 'https:' || !(url.hostname === 'hdslb.com' || url.hostname.endsWith('.hdslb.com')) || url.port || url.username || url.password) {
@@ -87,11 +93,13 @@ export class FavoriteService {
       if (part.status === 'available') continue;
       const cached = this.store.transcript(id, part.cid);
       if (cached) {
+        delete part.reason;
         part.subtitles = cached.segments; part.language = cached.language;
         part.source = 'local_whisper'; part.status = 'available';
       } else {
         const key = `${id}:${part.cid}`;
-        if (!this.jobs.has(key)) this.startTranscription(item, part.cid, key);
+        delete part.reason;
+        if (!this.jobs.has(key) || this.jobs.get(key).status === 'transcription_failed') this.startTranscription(item, part.cid, key);
         part.status = this.jobs.get(key).status;
         if (this.jobs.get(key).reason) part.reason = this.jobs.get(key).reason;
       }
@@ -115,11 +123,11 @@ export class FavoriteService {
       });
       const result = await this.transcribe(audioUrl);
       this.store.saveTranscript(item.itemId, cid, result);
-      job.status = 'available';
+      job.status = 'available'; this.jobs.delete(key);
     });
     this.transcriptionQueue = work.catch(error => {
       job.status = 'transcription_failed';
-      job.reason = /^(本地转写失败|Bilibili HTTP|Bilibili 接口错误|没有可读取的音轨|不支持的音频地址)/.test(error.message) ? error.message.split('\n')[0] : '音轨或转写当前不可用';
+      job.reason = transcriptionFailureReason(error);
     });
   }
 }
