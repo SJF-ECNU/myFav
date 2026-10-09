@@ -100,6 +100,6 @@ export async function readXhsNote(page, url, item) {
     const m = window.__INITIAL_STATE__.note.noteDetailMap;
     const n = (m.value ?? m)[id].note;
     const stream = Object.values(n.video?.media?.stream ?? {}).flat().find(s => s.masterUrl);
-    return { description: n.desc ?? '', title: n.title ?? '', type: n.type, mediaUrl: stream?.masterUrl, duration: n.video?.capa?.duration };
+    return { description: n.desc ?? '', title: n.title ?? '', type: n.type, mediaUrl: stream?.masterUrl, duration: n.video?.capa?.duration, images: (n.imageList ?? []).map(image => ({ url: image.urlDefault || image.urlPre || image.infoList?.[0]?.url, kind: n.type === 'video' ? 'cover' : 'image' })) };
   }, item.id);
 }

@@ -15,6 +15,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL REFERENCES items(id), created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sources (item_id TEXT PRIMARY KEY REFERENCES items(id), url TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS contents (item_id TEXT PRIMARY KEY REFERENCES items(id), data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS image_sources (item_id TEXT PRIMARY KEY REFERENCES items(id), data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS images (item_id TEXT NOT NULL REFERENCES items(id), position INTEGER NOT NULL, mime TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY(item_id,position));
       CREATE TABLE IF NOT EXISTS transcripts (item_id TEXT NOT NULL REFERENCES items(id), cid INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY(item_id,cid));
     `);
     this.db.exec('BEGIN IMMEDIATE');
@@ -88,6 +90,21 @@ export class Store {
   }
   currentItems(platform = 'bilibili') {
     return this.db.prepare('SELECT id FROM items WHERE present=1 AND platform=?').all(platform).map(row => this.item(row.id));
+  }
+  imageSources(id) {
+    const row = this.db.prepare('SELECT data FROM image_sources WHERE item_id=?').get(id);
+    return row ? JSON.parse(row.data) : null;
+  }
+  saveImageSources(id, sources) {
+    this.item(id);
+    this.db.prepare('INSERT INTO image_sources VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET data=excluded.data').run(id, JSON.stringify(sources));
+  }
+  image(id, index) {
+    return this.db.prepare('SELECT mime,data FROM images WHERE item_id=? AND position=?').get(id, index);
+  }
+  saveImage(id, index, image) {
+    this.item(id);
+    this.db.prepare('INSERT INTO images VALUES(?,?,?,?) ON CONFLICT(item_id,position) DO UPDATE SET mime=excluded.mime,data=excluded.data').run(id, index, image.mime, image.data);
   }
   content(id) {
     const row = this.db.prepare('SELECT data FROM contents WHERE item_id=?').get(id);

@@ -1,0 +1,82 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Store } from '../src/store.js';
+import { PlatformService } from '../src/platform-service.js';
+import { validateImageUrl, downloadImage } from '../src/images.js';
+import { createApp } from '../src/mcp.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+
+test('image downloads enforce platform URLs, redirects, actual format and bounded body', async () => {
+  for (const url of ['https://127.0.0.1/x','https://evil.test/x','https://xhscdn.com.evil.test/x','https://user:pass@a.xhscdn.com/x']) assert.throws(() => validateImageUrl(url, 'xiaohongshu'));
+  assert.equal(validateImageUrl('http://a.xhscdn.com/x', 'xiaohongshu'), 'https://a.xhscdn.com/x');
+  for (const [platform, host] of [['bilibili','i0.hdslb.com'],['douyin','p3.douyinpic.com'],['xiaohongshu','sns-webpic-qc.xhscdn.com']]) {
+    const image = await downloadImage(`https://${host}/x`, platform, async (_url, options) => { assert.equal(options.redirect, 'error'); return new Response(png); });
+    assert.equal(image.mime, 'image/png'); assert.deepEqual(image.data, png);
+  }
+  await assert.rejects(downloadImage('https://a.xhscdn.com/x','xiaohongshu',async()=>new Response('<html>')), /格式/);
+  await assert.rejects(downloadImage('https://a.xhscdn.com/x','xiaohongshu',async()=>new Response(png,{headers:{'content-length':'11000000'}})), /10MiB/);
+  await assert.rejects(downloadImage('https://a.xhscdn.com/x','xiaohongshu',async()=>new Response(Buffer.alloc(10*1024*1024+1))), /10MiB/);
+});
+
+test('SDK delivers native image bytes, ordered descriptors and cached reads without browser', async () => {
+  const store = new Store(':memory:');
+  store.apply({platform:'xiaohongshu',uid:'1',syncedAt:'now',folders:[{id:'10',title:'myFav',items:[{id:'1',type:'image'}]}]});
+  const itemId=store.currentItems('xiaohongshu')[0].itemId;
+  let reads=0, downloads=0;
+  const service=new PlatformService(store,{xiaohongshu:{imageSources:async()=>{reads++;return [{kind:'image',url:'https://a.xhscdn.com/1'},{kind:'image',url:'https://a.xhscdn.com/2'}];}}},async()=>{downloads++;return {mime:'image/png',data:png};});
+  await assert.rejects(service.image(itemId,0,false),/prepare/);
+  assert.deepEqual(await service.imageList(itemId,true),[{index:0,kind:'image',cached:false},{index:1,kind:'image',cached:false}]);
+  const hosts=['pending'], token='test-only-image-credential-1234567890';
+  const server=createApp(service,{token,allowedHosts:hosts}).listen(0,'127.0.0.1');
+  await new Promise(r=>server.once('listening',r)); hosts[0]=`127.0.0.1:${server.address().port}`;
+  const client=new Client({name:'test',version:'1'});
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://${hosts[0]}/mcp`),{requestInit:{headers:{Authorization:`Bearer ${token}`}}}));
+    const result=await client.callTool({name:'get_image',arguments:{itemId,index:1}});
+    assert.equal(result.content[0].type,'image'); assert.equal(result.content[0].mimeType,'image/png');
+    assert.deepEqual(Buffer.from(result.content[0].data,'base64'),png);
+    assert.deepEqual(Buffer.from((await service.image(itemId,1,false)).data),png);
+    assert.equal(reads,1);assert.equal(downloads,1);
+    assert.equal(service.cachedContent(itemId).images[1].cached,true);
+    assert.equal((await client.callTool({name:'get_image',arguments:{itemId,index:3}})).isError,true);
+    store.apply({platform:'xiaohongshu',uid:'1',syncedAt:'now',folders:[{id:'10',title:'myFav',items:[]}]});
+    await assert.rejects(service.image(itemId,1,false),/当前收藏/);
+  } finally {await client.close();await new Promise(r=>server.close(r));store.close();}
+});
+
+test('platform source extraction preserves galleries and video covers', async () => {
+  const { DouyinService } = await import('../src/douyin-service.js');
+  const { FavoriteService } = await import('../src/service.js');
+  const { readXhsNote } = await import('../src/xiaohongshu.js');
+  const dy=new DouyinService(null);
+  dy.withBrowser=async fn=>fn(async()=>({aweme_detail:{images:[{url_list:['https://p3.douyinpic.com/1']},{url_list:['https://p3.douyinpic.com/2']}],video:{cover:{url_list:['https://p3.douyinpic.com/cover']}}}}));
+  assert.deepEqual((await dy.imageSources({id:'1',type:'image'})).map(s=>s.url),['https://p3.douyinpic.com/1','https://p3.douyinpic.com/2']);
+  assert.equal((await dy.imageSources({id:'1',type:'video'}))[0].kind,'cover');
+  const bili=new FavoriteService(null);bili.withBrowser=async fn=>fn(async()=>({pic:'https://i0.hdslb.com/cover'}));
+  assert.equal((await bili.imageSources({bvid:'BV1'}))[0].kind,'cover');
+  const id='333333333333333333333333', board='111111111111111111111111';
+  const page={goto:async()=>{},waitForFunction:async()=>{},evaluate:async(fn,arg)=>{
+    globalThis.window={__INITIAL_STATE__:{note:{noteDetailMap:{[id]:{note:{type:'normal',imageList:[{urlDefault:'https://a.xhscdn.com/1'},{urlDefault:'https://a.xhscdn.com/2'}]}}}}}};
+    try{return fn(arg);}finally{delete globalThis.window;}
+  }};
+  const note=await readXhsNote(page,`https://www.xiaohongshu.com/board/${board}/${id}`,{id,itemId:`xiaohongshu:${board}:image:${id}`});
+  assert.deepEqual(note.images.map(s=>s.url),['https://a.xhscdn.com/1','https://a.xhscdn.com/2']);
+});
+
+test('image sources and binary cache survive restart', async () => {
+  const { mkdtemp, rm }=await import('node:fs/promises');
+  const { tmpdir }=await import('node:os');
+  const { join }=await import('node:path');
+  const dir=await mkdtemp(join(tmpdir(),'myfav-images-')),path=join(dir,'store.sqlite');
+  let store=new Store(path);
+  try {
+    store.apply({uid:1,syncedAt:'now',folders:[{id:10,title:'myFav',items:[{id:1,type:2}]}]});
+    store.saveImageSources('10:2:1',[{url:'https://i0.hdslb.com/cover',kind:'cover'}]);
+    store.saveImage('10:2:1',0,{mime:'image/png',data:png});store.close();store=new Store(path);
+    const service=new PlatformService(store,{});
+    assert.equal((await service.imageList('10:2:1'))[0].cached,true);
+    assert.deepEqual(Buffer.from((await service.image('10:2:1',0,false)).data),png);
+  }finally{store.close();await rm(dir,{recursive:true,force:true});}
+});

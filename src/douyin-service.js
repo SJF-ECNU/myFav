@@ -29,6 +29,15 @@ export class DouyinService extends FavoriteService {
     });
     this.queue = work.catch(() => {}); return work;
   }
+  imageSources(item) {
+    return this.withBrowser(async api => {
+      const detail = (await api('/aweme/v1/web/aweme/detail/', { aweme_id: item.id })).aweme_detail;
+      if (!detail) throw new Error('抖音作品详情不可用');
+      return item.type === 'image'
+        ? (detail.images ?? []).map(image => ({ url: image.url_list?.[0], kind: 'image' }))
+        : detail.video?.cover?.url_list?.[0] ? [{ url: detail.video.cover.url_list[0], kind: 'cover' }] : [];
+    });
+  }
   async sync() {
     const result = await this.withBrowser(async api => this.store.apply(await collectDouyin(api, this.folderName, this.store.status('douyin').scope?.uid)));
     this.preparationQueue = this.preparationQueue.then(async () => {

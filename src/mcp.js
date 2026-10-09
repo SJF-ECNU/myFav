@@ -17,6 +17,7 @@ export function createMcpServer(service, { principal = { scopes }, run = (_name,
   }, async args => {
     try {
       const data = await run(name, () => fn(args));
+      if (name === 'get_image') return { content: [{ type: 'image', mimeType: data.mime, data: Buffer.from(data.data).toString('base64') }] };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
     } catch (error) {
       return { isError: true, content: [{ type: 'text', text: error.busy ? '内容准备批次正在运行，请稍后重试；缓存仍可读取。' : '操作失败：请检查条目、登录状态或平台可用性；原同步数据未因读取失败覆盖。' }] };
@@ -30,6 +31,7 @@ export function createMcpServer(service, { principal = { scopes }, run = (_name,
     after: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0), limit: z.number().int().min(1).max(100).default(50),
   }, ({ after, limit, platform }) => service.store.updates(after, limit, platform));
   register('get_content', '读取简介、正文及字幕；只读身份仅返回缓存。有 prepare 权限时，无字幕后台本地 Whisper 转写；pending 时稍后读取。文本不包含画面理解。', { itemId: id }, ({ itemId }) => principal.scopes.includes('prepare') ? service.content(itemId) : service.cachedContent(itemId), !principal.scopes.includes('prepare'));
+  register('get_image', '按get_content图片索引获取图文图片或视频封面，返回原生图片。read仅取缓存；prepare可下载并缓存。没有OCR或图像分析。', { itemId: id, index: z.number().int().min(0).max(99).default(0) }, ({ itemId, index }) => service.image(itemId, index, principal.scopes.includes('prepare')), !principal.scopes.includes('prepare'));
   register('set_processing_status', '写回外部 Agent 的处理状态；不提供独占任务认领或自动执行。', {
     itemId: id, status: z.enum(['pending', 'processing', 'completed', 'failed']), note: z.string().max(4000).default(''),
   }, ({ itemId, status, note }) => service.store.setStatus(itemId, status, note), false);
@@ -93,7 +95,7 @@ export function createApp(service, { token, access = new Access(), oauth = null,
       return res.status(403).json({ error: 'Insufficient tool scope' });
     }
     const run = async (name, fn) => {
-      const work = name === 'sync_favorites' || (name === 'get_content' && req.principal.scopes.includes('prepare'));
+      const work = name === 'sync_favorites' || (['get_content', 'get_image'].includes(name) && req.principal.scopes.includes('prepare'));
       if (work && preparing) {
         if (name === 'get_content') { req.audit.outcome = 'ok'; return service.cachedContent(req.body.params.arguments.itemId); }
         req.audit.outcome = 'busy'; throw Object.assign(new Error('busy'), { busy: true });

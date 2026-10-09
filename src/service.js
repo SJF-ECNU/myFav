@@ -63,6 +63,12 @@ export class FavoriteService {
     this.queue = job.catch(() => {});
     return job;
   }
+  imageSources(item) {
+    return this.withBrowser(async api => {
+      const video = await api('/x/web-interface/view', { bvid: item.bvid });
+      return video.pic ? [{ url: video.pic, kind: 'cover' }] : [];
+    });
+  }
   async sync() {
     const result = await this.withBrowser(async api => {
       const user = await api('/x/web-interface/nav');

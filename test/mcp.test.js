@@ -52,7 +52,7 @@ test('content distinguishes partial subtitles, metadata and unsafe subtitle URLs
   for (const url of ['http://i0.hdslb.com/x', 'https://hdslb.com.evil.test/x', 'https://127.0.0.1/x', 'https://user@i0.hdslb.com/x']) assert.throws(() => validateSubtitleUrl(url));
 });
 
-test('real SDK HTTP protocol exposes six tools, rejects auth/host/origin and validates writes', async () => {
+test('real SDK HTTP protocol exposes seven tools, rejects auth/host/origin and validates writes', async () => {
   const store = new Store(':memory:');
   const service = { store, sync: async () => store.apply(snapshot([1])), content: async id => ({ metadata: store.item(id), status: 'metadata_only' }) };
   const token = 'test-only-credential-not-production-12345';
@@ -72,7 +72,7 @@ test('real SDK HTTP protocol exposes six tools, rejects auth/host/origin and val
     });
     assert.equal(badHostStatus, 403);
     await client.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
-    assert.equal((await client.listTools()).tools.length, 6);
+    assert.equal((await client.listTools()).tools.length, 7);
     assert.equal((await client.callTool({ name: 'sync_favorites', arguments: {} })).structuredContent.added, 1);
     const updates = await client.callTool({ name: 'list_updates', arguments: {} });
     const itemId = updates.structuredContent.events[0].item.itemId;

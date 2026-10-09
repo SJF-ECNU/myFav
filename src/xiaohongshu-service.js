@@ -13,6 +13,9 @@ export class XiaohongshuService extends FavoriteService {
     });
     this.queue = work.catch(() => {}); return work;
   }
+  imageSources(item) {
+    return this.withBrowser(async page => (await readXhsNote(page, this.store.source(item.itemId), item)).images);
+  }
   async sync() {
     const result = await this.withBrowser(async page => {
       const { snapshot, sources } = await collectXiaohongshu(page, this.folderName, this.store.status('xiaohongshu').scope?.uid);

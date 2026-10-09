@@ -63,7 +63,7 @@ test('real SDK enforces scopes, reads cached transcripts without preparation, re
     assert.equal(preflight.status, 204); assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://agent.example.test');
     assert.equal((await fetch(url, { headers: { Origin: 'https://other.example.test', Authorization: `Bearer ${read}` } })).status, 403);
     reader = await connect(url, read); writer = await connect(url, write);
-    assert.deepEqual((await reader.listTools()).tools.map(t => t.name), ['list_updates', 'get_content', 'get_result']);
+    assert.deepEqual((await reader.listTools()).tools.map(t => t.name), ['list_updates', 'get_content', 'get_image', 'get_result']);
     assert.equal((await reader.callTool({ name: 'get_content', arguments: { itemId: '10:2:1' } })).structuredContent.status, 'metadata_only');
     store.saveContent('10:2:1', { metadata: {}, parts: [{ cid: 1, status: 'no_subtitles' }], evidence: { includesVisuals: false } });
     store.saveTranscript('10:2:1', 1, { language: 'zh', segments: [{ text: 'PRIVATE TRANSCRIPT', from: 0, to: 1 }] });
@@ -75,7 +75,7 @@ test('real SDK enforces scopes, reads cached transcripts without preparation, re
     await assert.rejects(writer.callTool({ name: 'get_result', arguments: { itemId: '10:2:1' } }));
     await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${read}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'SECRET TOOL NAME', arguments: { private: 'PRIVATE ARGS' } } }) });
     await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${read}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: { toString: null }, arguments: {} } }) });
-    assert.equal((await reader.listTools()).tools.length, 3);
+    assert.equal((await reader.listTools()).tools.length, 4);
     access.revoke('reader');
     assert.equal((await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${read}` } })).status, 401);
     await writer.callTool({ name: 'set_processing_status', arguments: { itemId: '10:2:1', status: 'completed' } });

@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const scopes = ['read', 'prepare', 'write'];
-export const toolScopes = { sync_favorites: 'prepare', list_updates: 'read', get_content: 'read', set_processing_status: 'write', save_result: 'write', get_result: 'read' };
+export const toolScopes = { sync_favorites: 'prepare', list_updates: 'read', get_content: 'read', get_image: 'read', set_processing_status: 'write', save_result: 'write', get_result: 'read' };
 export function parseScopes(values) {
   const result = [...new Set(typeof values === 'string' ? values.split(',') : values)];
   if (!result.length || result.some(value => !scopes.includes(value))) throw Error('权限必须为 read、prepare、write');

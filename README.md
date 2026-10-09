@@ -197,3 +197,9 @@ npm start
 ## 许可与致谢
 
 myFav 自有代码使用 [MIT License](LICENSE)。感谢 CloakBrowser、MCP SDK、Playwright、OpenAI Whisper、FFmpeg、noVNC 及相关平台研究项目；依赖保留各自许可，完整来源与许可说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 获取图片
+
+`get_content(itemId)` 返回 `images` 列表（从0开始的 index、kind=image/cover、cached）。调用 `get_image(itemId,index)` 获取 MCP 原生 image 内容块，包含 mimeType 与 base64 图片。支持小红书图文、抖音图集和 Bilibili/抖音/小红书视频封面；不做 OCR 或图片分析。
+
+图片以 SQLite 持久缓存，仍受现有 Agent read 权限保护。read 身份只能获取已经缓存的图片；prepare 身份可提取图片来源、下载并缓存，下载失败会刷新一次来源以处理签名过期。单图最大10MiB，支持 JPEG/PNG/WebP/GIF，禁止任意URL和重定向。首次获取需要平台登录态；旧缓存文本无需清空。get_content 的 includesVisuals 仍表示服务没有进行视觉分析，图片内容由调用方自行理解。ChatGPT 旧连接器可能需要刷新工具列表以发现新增 get_image。

@@ -23,7 +23,8 @@
 | --- | --- | --- |
 | sync_favorites | platform=bilibili，可选douyin/xiaohongshu/all；服务端指定收藏夹 | 新增数、成员数、scope、cursor |
 | list_updates | after=0、limit=50（最大100）、可选platform | events、nextCursor、hasMore |
-| get_content | itemId | 元数据、分P文本、来源、提取状态、证据范围 |
+| get_content | itemId | 元数据、分P文本、图片索引、提取状态、证据范围 |
+| get_image | itemId, index | MCP原生图片；read取缓存，prepare可下载 |
 | set_processing_status | itemId、status、note | 当前成员状态 |
 | save_result | itemId、summary、artifacts URL 列表 | 持久结果；不自动改变状态 |
 | get_result | itemId | 状态、备注和结果；未写回时 result=null |
@@ -64,7 +65,7 @@ src/xiaohongshu.js与xiaohongshu-service.js读取网页自身专辑和笔记状�
 
 图文获取正文并缓存，视频获取简介与原视频media.stream；当前样本未发现字幕字段，使用本地Whisper转写。CDN限定HTTPS *.xhscdn.com；平台返回的HTTP地址升级为同域HTTPS，不允许任意下载域名。sources表存本地笔记访问链接（含平台访问参数），独立于返回给Agent的items/content。MCP返回清洁的explore URL，后续由浏览器访问详情不保证匿名可见。
 
-服务端配置MYFAV_XIAOHONGSHU_FOLDER默认myFav。统一六工具platform新增xiaohongshu，all包含三个平台；旧Bilibili客户端默认行为和ID保持。
+服务端配置MYFAV_XIAOHONGSHU_FOLDER默认myFav。统一工具platform新增xiaohongshu，all包含三个平台；旧Bilibili客户端默认行为和ID保持。
 
 ## 容器与无屏幕登录
 
@@ -83,3 +84,6 @@ src/browser-session.js 为三平台登录和服务提供 openSession，返回 co
 `src/access.js` 在独立私有 SQLite 中保存 Agent 凭据、OAuth 身份绑定及仅元数据审计。`src/mcp.js` 按每次请求过滤工具并执行 read/prepare/write 检查；只读内容通过 `cachedContent` 读取缓存。按 Agent 限流，准备批次占用延续到后台队列 drain 完成。管理通过本机 `src/agents-cli.js`，不暴露远程管理工具。
 
 `src/oauth.js` 负责公开 MCP 资源发现以及 JWT/JWKS 或不透明令牌 introspection。OAuth 授权服务负责登录、强制 PKCE S256、授权码及刷新；本地权限与访问令牌 scope 取交集。所有 Agent 仍共享单用户收藏库。部署说明见 [OAuth 手册](oauth/README.md)。
+
+## 图片交付
+图片来源按顺序持久化于 image_sources，二进制与 MIME 存于 images（item_id,position）。get_content返回不含签名链接的索引，get_image返回MCP image block。prepare获取来源/下载，read只读现有缓存；被移除成员禁止读取图片。下载限制为平台HTTPS CDN、无重定向、单图10MiB和图片签名格式识别。失败可刷新一次来源；不做OCR/分析，includesVisuals不表示Agent是否已理解图片。
