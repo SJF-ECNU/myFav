@@ -1,20 +1,13 @@
-import { launchPersistentContext } from 'cloakbrowser';
-import { mkdir, chmod } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { openSession } from './browser-session.js';
 import { setTimeout } from 'node:timers/promises';
 
 export async function openBrowser(headless) {
-  const profile = resolve('.local/bilibili-profile');
-  await mkdir(profile, { recursive: true, mode: 0o700 });
-  await chmod(resolve('.local'), 0o700);
-  await chmod(profile, 0o700);
-  const context = await launchPersistentContext({ userDataDir: profile, headless });
+  const { context, page, close } = await openSession('bilibili', headless);
   try {
-    const page = context.pages()[0] || await context.newPage();
     await page.goto('https://www.bilibili.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
-    return { context, page };
+    return { context, page, close };
   } catch (error) {
-    await context.close();
+    await close();
     throw error;
   }
 }

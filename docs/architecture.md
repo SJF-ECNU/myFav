@@ -71,3 +71,9 @@ src/xiaohongshu.js与xiaohongshu-service.js读取网页自身专辑和笔记状�
 Docker 使用 Node 24 Debian、CPU Whisper 和非 root 用户。Compose 数据卷保存 .local（SQLite 和三平台浏览器目录），模型缓存另设卷。主服务默认只映射主机回环 8787。
 
 临时 login 服务运行 Xvfb 虚拟屏幕、x11vnc 和 noVNC，回环 6080 通过 SSH 隧道在用户电脑访问。Agent 启动服务，用户手动扫码，确认登录后窗口服务退出。登录前停止 MCP，避免同一配置目录被两个进程占用；不暴露浏览器调试协议。操作步骤见根 README。
+
+## 可替换浏览器会话
+
+src/browser-session.js 为三平台登录和服务提供 openSession，返回 context/page/close。默认 CloakBrowser 保持平台独立持久目录；chromium 使用配置的 executablePath；cdp 使用 Playwright connectOverCDP 默认上下文并新建工作页。调用方统一调用 close，CDP 不调用共享 context.close，而只关闭工作页后断开浏览器连接。使用 noDefaults 避免连接时更改已有上下文默认行为。
+
+外部浏览器登录态与用户数据由提供方持久化；myFav 不导出 Cookie。自启动模式和 CLI 读取同一 .env 配置，连接错误不输出端点或启动原始详情。高级功能与版本仍需逐一验证，不支持工具专用且无 CDP 的云浏览器。

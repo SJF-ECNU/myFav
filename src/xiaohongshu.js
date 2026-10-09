@@ -1,22 +1,16 @@
-import { launchPersistentContext } from 'cloakbrowser';
-import { mkdir, chmod } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { openSession } from './browser-session.js';
 import { validateAudioUrl } from './transcribe.js';
 
 export async function openXiaohongshu() {
-  const profile = resolve('.local/xiaohongshu-profile');
-  await mkdir(profile, { recursive: true, mode: 0o700 });
-  await chmod(resolve('.local'), 0o700); await chmod(profile, 0o700);
-  const context = await launchPersistentContext({ userDataDir: profile, headless: true });
+  const { context, page, close } = await openSession('xiaohongshu', true);
   try {
-    const page = context.pages()[0] || await context.newPage();
     await page.goto('https://www.xiaohongshu.com/explore', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForFunction(() => {
       const s = window.__INITIAL_STATE__?.user?.userInfo; const u = s?.value ?? s;
       return u && !u.guest && u.userId;
     }, null, { timeout: 15000 });
-    return { context, page };
-  } catch { await context.close(); throw new Error('小红书登录或网页当前不可用'); }
+    return { context, page, close };
+  } catch { await close(); throw new Error('小红书登录或网页当前不可用'); }
 }
 export function validateNoteUrl(value, boardId, noteId) {
   const u = new URL(value, 'https://www.xiaohongshu.com');

@@ -6,6 +6,10 @@ case "${1:-bilibili}" in
   xiaohongshu) login_script=xiaohongshu:login ;;
   *) echo 'Unknown platform'; exit 2 ;;
 esac
+if [ "${MYFAV_BROWSER:-cloakbrowser}" = cdp ]; then
+  echo 'Use the external browser window to sign in; no local noVNC window is started.'
+  exec npm run "$login_script"
+fi
 Xvfb :99 -screen 0 1366x768x24 -nolisten tcp &
 xvfb_pid=$!
 cleanup() {

@@ -19,6 +19,9 @@ jobs:
         run: |
           docker run --rm --shm-size=1g myfav:test node --input-type=module -e 'import {launch} from "cloakbrowser"; const b=await launch({headless:true}); const p=await b.newPage(); await p.goto("data:text/html,<title>myFav</title>"); if(await p.title()!=="myFav")throw Error("title"); await b.close();'
           docker run --rm --shm-size=1g myfav:test sh -c 'Xvfb :99 -screen 0 1366x768x24 -nolisten tcp & sleep 2; node --input-type=module -e '\''import {launch} from "cloakbrowser"; const b=await launch({headless:false}); const p=await b.newPage(); await p.goto("data:text/html,<title>myFav headed</title>"); if(await p.title()!=="myFav headed")throw Error("title"); await b.close();'\'''
+      - name: Browser backend integration
+        run: |
+          docker run --rm --init --shm-size=1g myfav:test node scripts/browser-smoke.js --bundled
       - name: Temporary remote login window
         run: |
           docker run -d --init --name login-check --shm-size=1g -p 127.0.0.1:6080:6080 myfav:test login bilibili

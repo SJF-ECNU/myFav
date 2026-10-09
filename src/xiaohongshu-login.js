@@ -1,17 +1,12 @@
-import { launchPersistentContext } from 'cloakbrowser';
-import { mkdir, chmod } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { openSession } from './browser-session.js';
 import { setTimeout } from 'node:timers/promises';
 
 const command = process.argv[2];
 if (!['login', 'status'].includes(command)) throw new Error('使用 login 或 status');
-const profile = resolve('.local/xiaohongshu-profile');
-await mkdir(profile, { recursive: true, mode: 0o700 });
-await chmod(resolve('.local'), 0o700); await chmod(profile, 0o700);
-let context;
+let close;
 try {
-  context = await launchPersistentContext({ userDataDir: profile, headless: command === 'status' });
-  const page = context.pages()[0] || await context.newPage();
+  const session = await openSession('xiaohongshu', command === 'status');
+  const { context, page } = session; close = session.close;
   await page.goto('https://www.xiaohongshu.com/explore', { waitUntil: 'domcontentloaded', timeout: 60000 });
   const loggedIn = () => page.evaluate(() => {
     const state = window.__INITIAL_STATE__?.user?.userInfo;
@@ -29,4 +24,4 @@ try {
 } catch {
   console.error('小红书浏览器未能完成检查，请检查网络、窗口或是否已有进程占用配置。喵～');
   process.exitCode = 1;
-} finally { await context?.close(); }
+} finally { await close?.(); }

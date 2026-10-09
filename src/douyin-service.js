@@ -24,8 +24,8 @@ export class DouyinService extends FavoriteService {
   }
   withBrowser(fn) {
     const work = this.queue.then(async () => {
-      const { context, page } = await this.browser(true);
-      try { return await fn(douyinApi(page), page); } finally { await context.close(); }
+      const { context, page, close = () => context.close() } = await this.browser(true);
+      try { return await fn(douyinApi(page), page); } finally { await close(); }
     });
     this.queue = work.catch(() => {}); return work;
   }

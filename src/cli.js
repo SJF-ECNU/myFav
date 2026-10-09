@@ -9,13 +9,13 @@ if (!['login', 'status', 'sync'].includes(command)) {
   process.exit(1);
 }
 
-let context;
+let close;
 try {
   const browser = await openBrowser(command !== 'login');
-  context = browser.context;
+  close = browser.close;
   const api = browserApi(browser.page);
   if (command === 'login') {
-    console.log('请在专用浏览器中扫码登录 Bilibili；检测成功后自动关闭并保存。喵～');
+    console.log('请在专用浏览器中扫码登录 Bilibili；检测成功后保存登录态并结束本次连接。喵～');
     const deadline = Date.now() + 10 * 60 * 1000;
     let loggedIn = false;
     while (Date.now() < deadline) {
@@ -28,7 +28,7 @@ try {
       await setTimeout(3000);
     }
     if (!loggedIn) throw new Error('登录等待超时，请重试');
-    console.log('登录成功，正在保存专用浏览器配置。喵～');
+    console.log('登录成功，当前浏览器已保存登录态。喵～');
   } else {
     const user = await api('/x/web-interface/nav');
     if (!user.isLogin) throw new Error('尚未登录，请运行 npm run login');
@@ -44,5 +44,5 @@ try {
   console.error(`执行失败：${error.message.split('\n')[0]}。喵～`);
   process.exitCode = 1;
 } finally {
-  await context?.close();
+  await close?.();
 }

@@ -8,8 +8,8 @@ export class XiaohongshuService extends FavoriteService {
   }
   withBrowser(fn) {
     const work = this.queue.then(async () => {
-      const { context, page } = await this.browser();
-      try { return await fn(page); } finally { await context.close(); }
+      const { context, page, close = () => context.close() } = await this.browser();
+      try { return await fn(page); } finally { await close(); }
     });
     this.queue = work.catch(() => {}); return work;
   }

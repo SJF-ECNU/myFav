@@ -7,15 +7,15 @@
     "node": ">=24"
   },
   "scripts": {
-    "login": "node src/cli.js login",
-    "status": "node src/cli.js status",
-    "sync": "node src/cli.js sync",
+    "login": "node --env-file-if-exists=.env src/cli.js login",
+    "status": "node --env-file-if-exists=.env src/cli.js status",
+    "sync": "node --env-file-if-exists=.env src/cli.js sync",
     "test": "node --test",
     "start": "node --env-file-if-exists=.env src/server.js",
-    "douyin:login": "node src/douyin-login.js login",
-    "douyin:status": "node src/douyin-login.js status",
-    "xiaohongshu:login": "node src/xiaohongshu-login.js login",
-    "xiaohongshu:status": "node src/xiaohongshu-login.js status"
+    "douyin:login": "node --env-file-if-exists=.env src/douyin-login.js login",
+    "douyin:status": "node --env-file-if-exists=.env src/douyin-login.js status",
+    "xiaohongshu:login": "node --env-file-if-exists=.env src/xiaohongshu-login.js login",
+    "xiaohongshu:status": "node --env-file-if-exists=.env src/xiaohongshu-login.js status"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

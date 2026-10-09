@@ -50,9 +50,9 @@ export class FavoriteService {
   }
   withBrowser(fn) {
     const job = this.queue.then(async () => {
-      const { context, page } = await this.browser(true);
+      const { context, page, close = () => context.close() } = await this.browser(true);
       try { return await fn(browserApi(page), page); }
-      finally { await context.close(); }
+      finally { await close(); }
     });
     this.queue = job.catch(() => {});
     return job;

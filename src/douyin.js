@@ -1,18 +1,12 @@
-import { launchPersistentContext } from 'cloakbrowser';
-import { mkdir, chmod } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { openSession } from './browser-session.js';
 
 export async function openDouyin(headless = true) {
-  const profile = resolve('.local/douyin-profile');
-  await mkdir(profile, { recursive: true, mode: 0o700 });
-  await chmod(resolve('.local'), 0o700); await chmod(profile, 0o700);
-  const context = await launchPersistentContext({ userDataDir: profile, headless });
+  const { context, page, close } = await openSession('douyin', headless);
   try {
-    const page = context.pages()[0] || await context.newPage();
     await page.goto('https://www.douyin.com/user/self?showTab=favorite_collection', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.getByText('收藏夹', { exact: true }).waitFor({ timeout: 30000 });
-    return { context, page };
-  } catch { await context.close(); throw new Error('抖音登录或网页当前不可用'); }
+    return { context, page, close };
+  } catch { await close(); throw new Error('抖音登录或网页当前不可用'); }
 }
 export function douyinApi(page) {
   let previous = 0;
