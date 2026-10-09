@@ -7,3 +7,5 @@
 
 ## 验证记录
 真实 macOS Google Chrome 指定路径持久 Cookie 重启复用、三平台 CDP 会话 Cookie/localStorage 复用、原有页面及浏览器存活通过。Docker ARM64 指定路径与 CDP 集成也通过（使用镜像内的 Chromium 作为独立外部浏览器）；服务释放走 close 而非共享 context.close。尚未验证用户截图中的云浏览器实际端点及真实平台账号。
+
+23 项本机与 ARM64 容器测试通过；Linux x86_64 完整 CI（含浏览器后端集成、noVNC、CPU 转写）通过：https://github.com/SJF-ECNU/myFav/actions/runs/37918351557 。

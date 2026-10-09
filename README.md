@@ -91,9 +91,9 @@ docker compose logs -f myfav
 
 ## 使用其他 Chromium 浏览器
 
-三平台的登录、状态检查与同步共用后端配置。默认 `MYFAV_BROWSER=cloakbrowser`；不再要求所有环境启动自带浏览器。
+三平台的登录、状态检查与同步共用后端配置；修改 `.env` 后重启 MCP 服务，Docker 部署还需更新镜像后重建服务容器。默认 `MYFAV_BROWSER=cloakbrowser`；不再要求所有环境启动自带浏览器。
 
-**启动指定内核**：在 `.env` 配置以下变量。路径指向 Chrome、Chromium 或 Edge 可执行文件；浏览器版本仍需实测。仍使用 `.local/<平台>-profile` 专用持久目录，不读取你日常浏览器的配置。
+**启动指定内核**：在 `.env` 配置以下变量。路径指向 Chrome、Chromium 或 Edge 可执行文件；浏览器版本仍需实测。仍使用 `.local/<平台>-profile` 专用持久目录，不读取你日常浏览器的配置；切换内核可能需要重新登录。
 
 ```dotenv
 MYFAV_BROWSER=chromium
@@ -151,7 +151,7 @@ npm start
 
 ## 验证
 
-浏览器兼容变更已通过 23 项自动测试，以及真实 Google Chrome 和 Docker 中的指定路径/CDP 集成测试；验证持久 Cookie、共享登录态与原有页面保留。尚未验证具体云浏览器服务的 CDP 接口。
+浏览器兼容变更已通过 23 项自动测试，以及真实 Google Chrome 和 Docker 中的指定路径/CDP 集成测试；验证持久 Cookie、共享登录态与原有页面保留。[Linux x86_64 容器 CI 也已通过](https://github.com/SJF-ECNU/myFav/actions/runs/37918351557)。尚未验证具体云浏览器服务的 CDP 接口。
 
 2026-10-09：[Linux x86_64 容器验证通过](https://github.com/SJF-ECNU/myFav/actions/runs/37908134702)，包括无屏幕浏览器、远程登录窗口入口及 CPU 转写。本机 Linux ARM64 容器也已通过 19 项测试、浏览器、noVNC WebSocket 连接、HTTP MCP 和 Whisper base CPU 转写验证。真实服务器扫码和长期使用尚待验证。
 
