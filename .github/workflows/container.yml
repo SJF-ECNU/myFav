@@ -22,7 +22,7 @@ jobs:
       - name: Temporary remote login window
         run: |
           docker run -d --init --name login-check --shm-size=1g -p 127.0.0.1:6080:6080 myfav:test login bilibili
-          curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:6080/vnc.html -o /tmp/vnc.html
+          curl --fail --retry 10 --retry-delay 1 --retry-connrefused --retry-all-errors http://127.0.0.1:6080/vnc.html -o /tmp/vnc.html
           grep -q noVNC /tmp/vnc.html
           docker exec login-check python -c 'import socket; s=socket.create_connection(("127.0.0.1",5900)); assert s.recv(12).startswith(b"RFB "); print("VNC server verified")'
           docker stop login-check
