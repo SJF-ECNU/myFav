@@ -6,12 +6,23 @@ export async function openDouyin(headless = true, browser = openSession) {
   try {
     const ready = page.waitForResponse(response => {
       const url = new URL(response.url());
-      return url.hostname === 'www.douyin.com' && url.pathname === '/aweme/v1/web/aweme/favorite/';
+      return url.hostname === 'www.douyin.com' && ['/aweme/v1/web/aweme/favorite/', '/aweme/v1/web/aweme/listcollection/'].includes(url.pathname);
+    }, { timeout: 60000 }).catch(() => null);
+    const profileReady = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.hostname === 'www.douyin.com' && url.pathname === '/aweme/v1/web/user/profile/self/';
     }, { timeout: 30000 }).catch(() => null);
     const navigation = await page.goto('https://www.douyin.com/user/self?showTab=favorite_collection', { waitUntil: 'domcontentloaded', timeout: 60000 });
     if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after'], '', 'navigation');
     checkChallenge(page);
     if (!(await context.cookies('https://www.douyin.com')).some(cookie => ['sessionid', 'sessionid_ss'].includes(cookie.name) && cookie.value)) checkResponse(0, null, '未登录', 'session_check');
+    const profile = await profileReady;
+    if (!profile) throw new Error('抖音页面请求尚未就绪');
+    checkResponse(profile.status(), profile.headers()['retry-after'], '', 'page_initialization');
+    const profileBody = await profile.json();
+    checkResponse(profile.status(), null, profileBody.status_msg, 'page_initialization');
+    if (profile.status() < 200 || profile.status() >= 300 || profileBody.status_code !== 0) throw new Error('抖音页面请求尚未就绪');
+    await page.getByText('收藏', { exact: true }).click();
     await page.getByText('收藏夹', { exact: true }).waitFor({ timeout: 30000 });
     const response = await ready;
     if (!response) throw new Error('抖音页面请求尚未就绪');

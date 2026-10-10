@@ -241,7 +241,7 @@ test('Douyin sync skips only redundant folder lookup and keeps bound owner valid
 
 test('Douyin visible tab is not ready until native favorites succeeds', async () => {
   const ready=deferred();let closed=0,returned=false;
-  const page={waitForResponse:()=>ready.promise,goto:async()=>null,getByText:()=>({waitFor:async()=>{}})};
+  const page={waitForResponse:()=>ready.promise,goto:async()=>null,getByText:()=>({waitFor:async()=>{},click:async()=>{}})};
   const browser=async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}});
   const opening=openDouyin(true,browser).then(value=>{returned=true;return value;});
   await new Promise(resolve=>setImmediate(resolve)); assert.equal(returned,false);
@@ -251,7 +251,7 @@ test('Douyin visible tab is not ready until native favorites succeeds', async ()
 
 test('Douyin native readiness refusal closes session and retains HTTP diagnostic', async () => {
   let closed=0;
-  const page={waitForResponse:async()=>({status:()=>403,headers:()=>({})}),goto:async()=>null,getByText:()=>({waitFor:async()=>{}})};
+  const page={waitForResponse:async()=>({status:()=>403,headers:()=>({})}),goto:async()=>null,getByText:()=>({waitFor:async()=>{},click:async()=>{}})};
   const browser=async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}});
   await assert.rejects(openDouyin(true,browser),error=>error.diagnostic.httpStatus===403&&error.diagnostic.stage==='page_initialization');
   assert.equal(closed,1);
@@ -259,8 +259,22 @@ test('Douyin native readiness refusal closes session and retains HTTP diagnostic
 
 test('Douyin readiness timeout closes session without a fake HTTP refusal', async () => {
   let closed=0;
-  const page={waitForResponse:async()=>{throw new Error('timeout');},goto:async()=>null,getByText:()=>({waitFor:async()=>{}})};
+  const page={waitForResponse:async()=>{throw new Error('timeout');},goto:async()=>null,getByText:()=>({waitFor:async()=>{},click:async()=>{}})};
   const browser=async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}});
   await assert.rejects(openDouyin(true,browser),error=>!error.platformStop);
   assert.equal(closed,1);
+});
+
+
+test('Douyin readiness accepts both observed native favorites routes only on platform host', async () => {
+  const selectors=[];
+  const response={status:()=>200,headers:()=>({}),json:async()=>({status_code:0})};
+  const page={waitForResponse:async selector=>{selectors.push(selector);return response;},goto:async()=>null,getByText:()=>({waitFor:async()=>{},click:async()=>{}})};
+  const session=await openDouyin(true,async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{}}));
+  const native=selectors[0];
+  assert.equal(native({url:()=> 'https://www.douyin.com/aweme/v1/web/aweme/listcollection/'}),true);
+  assert.equal(native({url:()=> 'https://www.douyin.com/aweme/v1/web/aweme/favorite/'}),true);
+  assert.equal(native({url:()=> 'https://other.invalid/aweme/v1/web/aweme/favorite/'}),false);
+  assert.equal(native({url:()=> 'https://www.douyin.com/aweme/v1/web/notice/count/'}),false);
+  await session.close();
 });
