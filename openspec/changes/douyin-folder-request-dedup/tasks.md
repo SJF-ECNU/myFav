@@ -1,0 +1,3 @@
+- [ ] Remove redundant sync request and distinguish stages
+- [ ] Verify owner mismatch rejection, complete pagination and request count
+- [ ] Push, deploy and run one normal production sync

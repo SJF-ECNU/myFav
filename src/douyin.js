@@ -44,10 +44,11 @@ export async function listDouyinFolders(api) {
     cursor = data.cursor;
   }
 }
-export async function collectDouyin(api, folderName = 'myFav', expectedUid) {
+export async function collectDouyin(api, folderName = 'myFav', expectedUid, expectedFolderId) {
   const matches = (await listDouyinFolders(api)).filter(f => f.collects_name === folderName);
   if (matches.length !== 1) throw new Error('抖音指定收藏夹不存在或重名');
   const folder = matches[0], uid = folder.user_id_str;
+  if (expectedFolderId && folder.collects_id_str !== String(expectedFolderId)) checkResponse(0, null, '账号已改变', 'account_check');
   if (!uid || (expectedUid && String(expectedUid) !== uid)) throw new Error('抖音登录账号已改变或无法确定');
   if (!Number.isInteger(folder.total_number)) throw new Error('抖音收藏夹计数异常');
   const items = [], ids = new Set(), cursors = new Set(); let cursor = 0;

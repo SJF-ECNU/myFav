@@ -24,12 +24,12 @@ export class DouyinService extends FavoriteService {
     super(store, folderName, browser, transcribe);
     this.platform = 'douyin';
   }
-  withBrowser(fn) {
+  withBrowser(fn, verifyScope = true) {
     const work = this.queue.then(async () => {
       return guardedBrowser(this.store, this.platform, () => this.browser(true), async page => {
         const api = this.guardedApi(douyinApi(page));
         const scope = this.store.status('douyin').scope;
-        if (scope) {
+        if (scope && verifyScope) {
           const folder = (await listDouyinFolders(api)).find(folder => folder.collects_id_str === scope.folder_id);
           if (!folder || String(folder.user_id_str) !== String(scope.uid)) checkResponse(0, null, '账号已改变', 'account_check');
         }
@@ -48,7 +48,7 @@ export class DouyinService extends FavoriteService {
     });
   }
   async sync() {
-    const result = await this.withBrowser(async api => this.store.apply(await collectDouyin(api, this.folderName, this.store.status('douyin').scope?.uid)));
+    const result = await this.withBrowser(async api => this.store.apply(await collectDouyin(api, this.folderName, this.store.status('douyin').scope?.uid, this.store.status('douyin').scope?.folder_id)), false);
     this.preparationQueue = this.preparationQueue.then(async () => {
       for (const item of this.store.currentItems('douyin')) {
         try { await this.content(item.itemId); } catch { /* Retry on the next sync or request. */ }

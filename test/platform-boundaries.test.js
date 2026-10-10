@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store.js';
-import { platformError, guardedBrowser, recordFailure, checkResponse } from '../src/platform-access.js';
+import { platformError, guardedBrowser, recordFailure, checkResponse, requestStage } from '../src/platform-access.js';
 import { PlatformService } from '../src/platform-service.js';
 import { FavoriteService, extractContent } from '../src/service.js';
 import { DouyinService } from '../src/douyin-service.js';
@@ -210,4 +210,29 @@ test('pause history stays bounded and HTTP 200 API refusals retain actual status
     assert.equal(store.pauseHistory('douyin')[0].signal,'login_required');
     assert.doesNotMatch(JSON.stringify(store.pauseHistory('douyin')), /secret/);
   } finally {store.close();}
+});
+
+
+test('Douyin sync skips only redundant folder lookup and keeps bound owner validation', async () => {
+  const store = new Store(':memory:');
+  store.apply(snapshot('douyin', [{id:'1',type:'image'}]));
+  const svc = new DouyinService(store);
+  let verification, folders=0;
+  svc.withBrowser = async (fn, verifyScope=true) => {
+    verification=verifyScope;
+    return fn(async path => {
+      if(path==='/aweme/v1/web/collects/list/') {folders++;return {collects_list:[{collects_id_str:'10',collects_name:'myFav',user_id_str:'1',total_number:1}],has_more:0};}
+      return {aweme_list:[{aweme_id:'1',aweme_type:68}],has_more:0};
+    });
+  };
+  await svc.sync(); await svc.preparationQueue;
+  assert.equal(verification,false); assert.equal(folders,2);
+  svc.withBrowser = async fn => fn(async () => ({collects_list:[{collects_id_str:'10',collects_name:'myFav',user_id_str:'other',total_number:1}],has_more:0}));
+  await assert.rejects(svc.sync(), /账号已改变/);
+  assert.equal(store.currentItems('douyin').length,1);
+  svc.withBrowser = async fn => fn(async () => ({collects_list:[{collects_id_str:'other',collects_name:'myFav',user_id_str:'1',total_number:1}],has_more:0}));
+  await assert.rejects(svc.sync(), /account_check/);
+  assert.equal(requestStage('/aweme/v1/web/collects/list/'),'favorites_folders');
+  assert.equal(requestStage('/aweme/v1/web/collects/video/list/'),'favorites_members');
+  store.close();
 });
