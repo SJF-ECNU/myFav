@@ -1,0 +1,4 @@
+# 明确标记抖音失效收藏占位
+
+对照：服务20位置返回19+10；正常网页10位置返回9+10，同一ID不见。详情接口对该既有成员返回aweme_detail=null、filter_detail.aweme_id匹配及filter_reason=status_deleted；文案说明权限或删除。收藏计数仍包含它。
+仅对已有指定收藏成员做详情核验，失效占位标为unavailable和previously_confirmed，不当作当前可抓取作品。可见成员加已确认失效占位必须等于前后不变总数；未知缺项及非明确失效继续失败。无需放宽普通数量检查，不自动退收藏。

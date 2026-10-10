@@ -81,3 +81,21 @@ test('caption parsing and platform media domain boundaries', () => {
   for (const url of ['http://test.douyinvod.com/x', 'https://douyinvod.com.evil.test/x', 'https://127.0.0.1/x', 'https://test.bilivideo.com/x']) assert.throws(() => validateAudioUrl(url, 'douyin'));
   assert.throws(() => validateAudioUrl('https://test.douyinvod.com/x'));
 });
+
+test('Douyin only accounts for scoped prior members with matching explicit unavailability evidence', async () => {
+  const prior=[{id:'2',type:'image',title:'old',platform:'douyin',itemId:'douyin:20:image:2',present:true}];
+  const makeApi=mode=>{let lists=0;return async(path,params)=>{
+    if(path.includes('/collects/list/'))return {collects_list:[{collects_name:'myFav',collects_id_str:'20',user_id_str:'99',total_number:mode==='changed'&&++lists>1?3:2}],has_more:0};
+    if(path.includes('/collects/video/list/'))return {aweme_list:[{aweme_id:'1',aweme_type:0}],has_more:0};
+    assert.equal(params.aweme_id,'2');
+    if(mode==='denied')throw Object.assign(new Error('denied'),{platformStop:true});
+    return {aweme_detail:mode==='available'?{aweme_id:'2'}:null,filter_detail:{aweme_id:mode==='wrongId'?'3':'2',filter_reason:mode==='unknown'?'unknown':'status_deleted'}};
+  };};
+  const result=await collectDouyin(makeApi('ok'),'myFav','99','20',prior);
+  assert.equal(result.folders[0].items.length,2);
+  assert.equal(result.folders[0].items[1].metadataStatus,'unavailable');
+  assert.equal(result.folders[0].items[1].membershipStatus,'previously_confirmed');
+  for(const mode of ['wrongId','unknown','denied','changed','available'])await assert.rejects(collectDouyin(makeApi(mode),'myFav','99','20',prior));
+  await assert.rejects(collectDouyin(makeApi('ok'),'myFav','99','20',[]));
+  await assert.rejects(collectDouyin(makeApi('ok'),'myFav','99','20',[{...prior[0],itemId:'douyin:21:image:2'}]));
+});

@@ -48,18 +48,19 @@ export class DouyinService extends FavoriteService {
     });
   }
   async sync() {
-    const result = await this.withBrowser(async api => this.store.apply(await collectDouyin(api, this.folderName, this.store.status('douyin').scope?.uid, this.store.status('douyin').scope?.folder_id)), false);
+    const result = await this.withBrowser(async api => this.store.apply(await collectDouyin(api, this.folderName, this.store.status('douyin').scope?.uid, this.store.status('douyin').scope?.folder_id, this.store.currentItems('douyin'))), false);
     this.preparationQueue = this.preparationQueue.then(async () => {
       for (const item of this.store.currentItems('douyin')) {
         try { await this.content(item.itemId); } catch { /* Retry on the next sync or request. */ }
       }
     });
-    return result;
+    return { ...result, unavailable: this.store.currentItems('douyin').filter(item => item.metadataStatus === 'unavailable').length };
   }
   async content(id) {
     const item = this.store.item(id);
     const membership = this.store.membershipCursor(id);
     let content = { metadata: item, sourceUrl: `https://www.douyin.com/${item.type === 'image' ? 'note' : 'video'}/${item.id}`, status: 'metadata_only', parts: [], evidence: { kind: 'metadata', includesVisuals: false, includesAudioTranscription: false } };
+    if (item.metadataStatus === 'unavailable') return { ...content, reason: item.unavailableReason };
     if (!item.present || item.type !== 'video') return content;
     content = this.store.content(id) ?? await this.withItemBrowser(item, async (api, page) => {
       const video = (await api('/aweme/v1/web/aweme/detail/', { aweme_id: item.id })).aweme_detail;

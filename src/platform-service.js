@@ -14,7 +14,7 @@ export class PlatformService {
     const membership = this.store.membershipCursor(id);
     if (!item.present) throw new Error('条目不在当前收藏夹');
     let sources = this.store.imageSources(id);
-    if (!sources && prepare) {
+    if (!sources && prepare && item.metadataStatus !== 'unavailable') {
       this.store.assertPlatform(item.platform);
       sources = await this.services[item.platform].imageSources(item);
       sources = sources.map(source => ({ ...source, url: validateImageUrl(source.url, item.platform) }));
@@ -30,6 +30,7 @@ export class PlatformService {
     const cached = this.store.image(id, index);
     if (cached) return cached;
     if (!prepare) throw new Error('图片尚未缓存，需要prepare权限获取');
+    if (item.metadataStatus === 'unavailable') throw new Error('作品已不可用；不重新获取图片');
     await this.imageList(id, true);
     let source = this.store.imageSources(id)?.[index];
     if (!source) throw new Error('图片索引不存在');

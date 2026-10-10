@@ -113,3 +113,20 @@ test('preparation batch permits cached images without downloads or unlocking the
     assert.equal(requests,0);
   } finally {release();await client.close();await new Promise(resolve=>server.close(resolve));store.close();}
 });
+
+test('unavailable Douyin members never prepare new content or images but retain historical cache', async () => {
+  const {DouyinService}=await import('../src/douyin-service.js');
+  const store=new Store(':memory:');
+  store.apply({platform:'douyin',uid:'1',syncedAt:'now',folders:[{id:'10',title:'myFav',items:[{id:'1',type:'video',metadataStatus:'unavailable',unavailableReason:'作品不可用'}]}]});
+  const itemId=store.currentItems('douyin')[0].itemId;let requests=0;
+  const dy=new DouyinService(store);dy.withBrowser=async()=>{requests++;throw Error('browser must not start');};
+  const service=new PlatformService(store,{douyin:dy},async()=>{requests++;throw Error('download must not start');});
+  try {
+    assert.equal((await service.content(itemId)).reason,'作品不可用');
+    assert.deepEqual(await service.imageList(itemId,true),[]);
+    await assert.rejects(service.image(itemId,0,true),/不可用/);
+    store.saveImage(itemId,0,{mime:'image/png',data:png});
+    assert.deepEqual(Buffer.from((await service.image(itemId,0,true)).data),png);
+    assert.equal(requests,0);
+  }finally{store.close();}
+});

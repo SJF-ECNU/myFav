@@ -65,7 +65,7 @@ export async function listDouyinFolders(api) {
     cursor = data.cursor;
   }
 }
-export async function collectDouyin(api, folderName = 'myFav', expectedUid, expectedFolderId) {
+export async function collectDouyin(api, folderName = 'myFav', expectedUid, expectedFolderId, previousItems = []) {
   const matches = (await listDouyinFolders(api)).filter(f => f.collects_name === folderName);
   if (matches.length !== 1) throw new Error('抖音指定收藏夹不存在或重名');
   const folder = matches[0], uid = folder.user_id_str;
@@ -87,7 +87,19 @@ export async function collectDouyin(api, folderName = 'myFav', expectedUid, expe
     if (!data.aweme_list.length || data.cursor == null) throw new Error('抖音作品分页不完整');
     cursor = data.cursor;
   }
-  const current = (await listDouyinFolders(api)).find(f => f.collects_id_str === folder.collects_id_str);
-  if (items.length !== folder.total_number || current?.total_number !== folder.total_number || current?.collects_name !== folderName) throw new Error('抖音收藏计数变化或不完整');
+  let current = (await listDouyinFolders(api)).find(f => f.collects_id_str === folder.collects_id_str);
+  if (current?.total_number !== folder.total_number || current?.collects_name !== folderName || current?.user_id_str !== uid) throw new Error('抖音收藏计数变化或不完整');
+  if (items.length < folder.total_number) {
+    const missing = previousItems.filter(item => item.present && item.platform === 'douyin' && item.itemId === `douyin:${folder.collects_id_str}:${item.type}:${item.id}` && !ids.has(item.id));
+    if (missing.length !== folder.total_number - items.length) throw new Error('抖音收藏计数变化或不完整');
+    for (const item of missing) {
+      const detail = await api('/aweme/v1/web/aweme/detail/', { aweme_id: item.id });
+      if (detail.aweme_detail || detail.filter_detail?.aweme_id !== item.id || detail.filter_detail?.filter_reason !== 'status_deleted') throw new Error('抖音收藏缺项尚无明确失效证据');
+      const { id, type, title, description, author, duration } = item;
+      items.push({ id, type, title, description, author, duration, metadataStatus: 'unavailable', membershipStatus: 'previously_confirmed', unavailableReason: '作品因权限或删除不可用；保留既有收藏占位' });
+    }
+    current = (await listDouyinFolders(api)).find(f => f.collects_id_str === folder.collects_id_str);
+  }
+  if (items.length !== folder.total_number || current?.total_number !== folder.total_number || current?.collects_name !== folderName || current?.user_id_str !== uid) throw new Error('抖音收藏计数变化或不完整');
   return { platform: 'douyin', uid, syncedAt: new Date().toISOString(), folders: [{ id: folder.collects_id_str, title: folderName, items }] };
 }
