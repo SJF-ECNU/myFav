@@ -84,3 +84,32 @@ test('image sources and binary cache survive restart', async () => {
     assert.deepEqual(Buffer.from((await service.image('10:2:1',0,false)).data),png);
   }finally{store.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test('preparation batch permits cached images without downloads or unlocking the batch', async () => {
+  const store=new Store(':memory:');
+  const snapshot={platform:'douyin',uid:'1',syncedAt:'now',folders:[{id:'10',title:'myFav',items:[{id:'1',type:'image'}]}]};
+  store.apply(snapshot);
+  const itemId=store.currentItems('douyin')[0].itemId;
+  store.saveImage(itemId,0,{mime:'image/png',data:png});
+  let release, requests=0;
+  const batch=new Promise(resolve=>{release=resolve;});
+  const service=new PlatformService(store,{douyin:{sync:async()=>({added:0}),imageSources:async()=>{requests++;throw new Error('browser must not start');}}},async()=>{requests++;throw new Error('download must not start');});
+  service.drain=()=>batch;
+  const hosts=['pending'],token='test-only-batch-credential-1234567890';
+  const server=createApp(service,{token,allowedHosts:hosts}).listen(0,'127.0.0.1');
+  await new Promise(resolve=>server.once('listening',resolve));hosts[0]=`127.0.0.1:${server.address().port}`;
+  const client=new Client({name:'test',version:'1'});
+  try {
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://${hosts[0]}/mcp`),{requestInit:{headers:{Authorization:`Bearer ${token}`}}}));
+    assert.equal((await client.callTool({name:'sync_favorites',arguments:{platform:'douyin'}})).isError,undefined);
+    const result=await client.callTool({name:'get_image',arguments:{itemId,index:0}});
+    assert.equal(result.isError,undefined);
+    assert.equal(result.content[0].type,'image');assert.equal(result.content[0].mimeType,'image/png');
+    assert.deepEqual(Buffer.from(result.content[0].data,'base64'),png);
+    assert.equal((await client.callTool({name:'get_image',arguments:{itemId,index:1}})).isError,true);
+    assert.equal((await client.callTool({name:'sync_favorites',arguments:{platform:'douyin'}})).isError,true);
+    store.apply({...snapshot,folders:[{id:'10',title:'myFav',items:[]}]});
+    assert.equal((await client.callTool({name:'get_image',arguments:{itemId,index:0}})).isError,true);
+    assert.equal(requests,0);
+  } finally {release();await client.close();await new Promise(resolve=>server.close(resolve));store.close();}
+});

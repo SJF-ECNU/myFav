@@ -98,6 +98,11 @@ export function createApp(service, { token, access = new Access(), oauth = null,
       const work = name === 'sync_favorites' || (['get_content', 'get_image'].includes(name) && req.principal.scopes.includes('prepare'));
       if (work && preparing) {
         if (name === 'get_content') { req.audit.outcome = 'ok'; return service.cachedContent(req.body.params.arguments.itemId); }
+        if (name === 'get_image') {
+          const { itemId, index = 0 } = req.body.params.arguments;
+          try { const image = await service.image(itemId, index, false); req.audit.outcome = 'ok'; return image; }
+          catch (error) { req.audit.outcome = 'error'; throw error; }
+        }
         req.audit.outcome = 'busy'; throw Object.assign(new Error('busy'), { busy: true });
       }
       if (work) preparing = true;
