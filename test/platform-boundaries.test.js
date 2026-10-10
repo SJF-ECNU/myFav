@@ -278,3 +278,17 @@ test('Douyin readiness accepts both observed native favorites routes only on pla
   assert.equal(native({url:()=> 'https://www.douyin.com/aweme/v1/web/notice/count/'}),false);
   await session.close();
 });
+
+test('Douyin navigation selects favorites without clicking before hydration', async () => {
+  const native=deferred(),profile=deferred();let returned=false,closed=0;
+  const page={
+    waitForResponse:predicate=>predicate({url:()=> 'https://www.douyin.com/aweme/v1/web/user/profile/self/'})?profile.promise:native.promise,
+    goto:async url=>{assert.equal(new URL(url).searchParams.get('showTab'),'favorite_collection');return null;},
+    getByText:()=>({waitFor:async()=>{},click:async()=>{assert.fail('already-selected favorites must not be clicked');}}),
+  };
+  const opening=openDouyin(true,async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}})).then(session=>{returned=true;return session;});
+  native.resolve({status:()=>200,headers:()=>({}),json:async()=>({status_code:0})});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(returned,false);
+  profile.resolve({status:()=>200,headers:()=>({}),json:async()=>({status_code:0})});
+  const session=await opening;assert.equal(returned,true);await session.close();assert.equal(closed,1);
+});

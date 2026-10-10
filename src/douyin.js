@@ -22,7 +22,6 @@ export async function openDouyin(headless = true, browser = openSession) {
     const profileBody = await profile.json();
     checkResponse(profile.status(), null, profileBody.status_msg, 'page_initialization');
     if (profile.status() < 200 || profile.status() >= 300 || profileBody.status_code !== 0) throw new Error('抖音页面请求尚未就绪');
-    await page.getByText('收藏', { exact: true }).click();
     await page.getByText('收藏夹', { exact: true }).waitFor({ timeout: 30000 });
     const response = await ready;
     if (!response) throw new Error('抖音页面请求尚未就绪');
