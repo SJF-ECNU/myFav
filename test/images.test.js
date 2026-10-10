@@ -50,12 +50,16 @@ test('platform source extraction preserves galleries and video covers', async ()
   const { DouyinService } = await import('../src/douyin-service.js');
   const { FavoriteService } = await import('../src/service.js');
   const { readXhsNote } = await import('../src/xiaohongshu.js');
-  const dy=new DouyinService(null);
+  const extractionStore=new Store(':memory:');
+  extractionStore.apply({platform:'douyin',uid:'1',syncedAt:'now',folders:[{id:'10',title:'myFav',items:[{id:'1',type:'image'},{id:'2',type:'video'}]}]});
+  const dy=new DouyinService(extractionStore);
   dy.withBrowser=async fn=>fn(async()=>({aweme_detail:{images:[{url_list:['https://p3.douyinpic.com/1']},{url_list:['https://p3.douyinpic.com/2']}],video:{cover:{url_list:['https://p3.douyinpic.com/cover']}}}}));
-  assert.deepEqual((await dy.imageSources({id:'1',type:'image'})).map(s=>s.url),['https://p3.douyinpic.com/1','https://p3.douyinpic.com/2']);
-  assert.equal((await dy.imageSources({id:'1',type:'video'}))[0].kind,'cover');
-  const bili=new FavoriteService(null);bili.withBrowser=async fn=>fn(async()=>({pic:'https://i0.hdslb.com/cover'}));
-  assert.equal((await bili.imageSources({bvid:'BV1'}))[0].kind,'cover');
+  assert.deepEqual((await dy.imageSources(extractionStore.currentItems('douyin')[0])).map(s=>s.url),['https://p3.douyinpic.com/1','https://p3.douyinpic.com/2']);
+  assert.equal((await dy.imageSources(extractionStore.currentItems('douyin')[1]))[0].kind,'cover');
+  extractionStore.apply({uid:1,syncedAt:'now',folders:[{id:10,title:'myFav',items:[{id:1,type:2,bvid:'BV1'}]}]});
+  const bili=new FavoriteService(extractionStore);bili.withBrowser=async fn=>fn(async()=>({pic:'https://i0.hdslb.com/cover'}));
+  assert.equal((await bili.imageSources(extractionStore.currentItems()[0]))[0].kind,'cover');
+  extractionStore.close();
   const id='333333333333333333333333', board='111111111111111111111111';
   const page={goto:async()=>{},waitForFunction:async()=>{},evaluate:async(fn,arg)=>{
     globalThis.window={__INITIAL_STATE__:{note:{noteDetailMap:{[id]:{note:{type:'normal',imageList:[{urlDefault:'https://a.xhscdn.com/1'},{urlDefault:'https://a.xhscdn.com/2'}]}}}}}};

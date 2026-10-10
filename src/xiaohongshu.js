@@ -1,16 +1,25 @@
+import { checkResponse, checkChallenge } from './platform-access.js';
 import { openSession } from './browser-session.js';
 import { validateAudioUrl } from './transcribe.js';
 
 export async function openXiaohongshu() {
   const { context, page, close } = await openSession('xiaohongshu', true);
   try {
-    await page.goto('https://www.xiaohongshu.com/explore', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const navigation = await page.goto('https://www.xiaohongshu.com/explore', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after']);
+    checkChallenge(page);
     await page.waitForFunction(() => {
       const s = window.__INITIAL_STATE__?.user?.userInfo; const u = s?.value ?? s;
-      return u && !u.guest && u.userId;
+      return Boolean(u);
     }, null, { timeout: 15000 });
+    const loggedIn = await page.evaluate(() => {
+      const value = window.__INITIAL_STATE__?.user?.userInfo;
+      const user = value?.value ?? value;
+      return Boolean(user && !user.guest && user.userId);
+    });
+    if (!loggedIn) checkResponse(401);
     return { context, page, close };
-  } catch { await close(); throw new Error('小红书登录或网页当前不可用'); }
+  } catch (error) { await close(); checkChallenge(page); if (error.platformStop) throw error; throw new Error('小红书登录或网页当前不可用'); }
 }
 export function validateNoteUrl(value, boardId, noteId) {
   const u = new URL(value, 'https://www.xiaohongshu.com');
@@ -36,7 +45,9 @@ export async function readXhsBoards(page, uid) {
   await page.goto(`https://www.xiaohongshu.com/user/profile/${uid}?tab=fav&subTab=board`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   const r = await response;
   if (r) {
+    checkResponse(r.status?.(), r.headers?.()['retry-after']);
     const b = await r.json();
+    checkResponse(0, null, b.message || b.msg);
     if (b.code !== 0 || !Array.isArray(b.data?.boards) || b.data.boards.length !== b.data.board_count) throw new Error('小红书专辑列表不完整');
     return b.data.boards;
   }
@@ -70,7 +81,10 @@ export async function collectXiaohongshu(page, folderName = 'myFav', expectedUid
     cursors.add(current.feed.cursor);
     const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/sns/web/v1/board/note', { timeout: 15000 });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    const r = await response, data = await r.json();
+    const r = await response;
+    checkResponse(r.status?.(), r.headers?.()['retry-after']);
+    const data = await r.json();
+    checkResponse(0, null, data.message || data.msg);
     if (data.code !== 0 || !Array.isArray(data.data?.notes)) throw new Error('小红书分页读取失败');
     await page.waitForFunction(({ id, length }) => {
       const m = window.__INITIAL_STATE__.board.boardFeedsMap;

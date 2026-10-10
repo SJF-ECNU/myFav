@@ -16,7 +16,8 @@
     "douyin:status": "node --env-file-if-exists=.env src/douyin-login.js status",
     "xiaohongshu:login": "node --env-file-if-exists=.env src/xiaohongshu-login.js login",
     "xiaohongshu:status": "node --env-file-if-exists=.env src/xiaohongshu-login.js status",
-    "agents": "node --env-file-if-exists=.env src/agents-cli.js"
+    "agents": "node --env-file-if-exists=.env src/agents-cli.js",
+    "platforms": "node --env-file-if-exists=.env src/platforms-cli.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

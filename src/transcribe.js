@@ -1,3 +1,4 @@
+import { checkResponse } from './platform-access.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -24,6 +25,8 @@ export async function transcribeAudio(url, platform = 'bilibili') {
     if (!Array.isArray(result.segments) || !result.segments.length || result.segments.some(segment => !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || typeof segment.text !== 'string')) throw new Error('转写格式异常');
     return { language: result.language, segments: result.segments.map(segment => ({ from: segment.start, to: segment.end, text: segment.text })) };
   } catch (error) {
+    const http = (error.stderr ?? '').match(/(?:HTTP error|Server returned)\s+(401|403|412|429)\b/i);
+    if (http) checkResponse(Number(http[1]));
     const reason = error.code === 'ENOENT' ? 'command_missing' : /certificate/i.test(error.stderr ?? '') ? 'certificate' : /download|urlopen/i.test(error.stderr ?? '') ? 'model_download' : 'execution';
     throw new Error(`本地转写失败：${stage}/${reason}`);
   } finally { await rm(directory, { recursive: true, force: true }); }

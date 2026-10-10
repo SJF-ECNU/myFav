@@ -20,7 +20,7 @@ export function createMcpServer(service, { principal = { scopes }, run = (_name,
       if (name === 'get_image') return { content: [{ type: 'image', mimeType: data.mime, data: Buffer.from(data.data).toString('base64') }] };
       return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
     } catch (error) {
-      return { isError: true, content: [{ type: 'text', text: error.busy ? '内容准备批次正在运行，请稍后重试；缓存仍可读取。' : '操作失败：请检查条目、登录状态或平台可用性；原同步数据未因读取失败覆盖。' }] };
+      return { isError: true, content: [{ type: 'text', text: error.platformStop ? error.message : error.busy ? '内容准备批次正在运行，请稍后重试；缓存仍可读取。' : '操作失败：请检查条目、登录状态或平台可用性；原同步数据未因读取失败覆盖。' }] };
     }
   });
   };

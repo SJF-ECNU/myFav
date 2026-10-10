@@ -1,3 +1,4 @@
+import { recordFailure } from './platform-access.js';
 import { downloadImage, validateImageUrl } from './images.js';
 export class PlatformService {
   constructor(store, services, download = downloadImage) { this.store = store; this.services = services; this.download = download; }
@@ -5,22 +6,26 @@ export class PlatformService {
     if (platform !== 'all') return this.services[platform].sync();
     return Promise.all(Object.entries(this.services).map(async ([platform, service]) => {
       try { return { platform, status: 'synced', ...await service.sync() }; }
-      catch { return { platform, status: 'failed', reason: '登录或平台当前不可用，保留旧同步数据' }; }
+      catch { return { platform, status: 'failed', reason: this.store.platformPause(platform)?.reason ?? '登录或平台当前不可用，保留旧同步数据' }; }
     })).then(platforms => ({ platforms, cursor: this.store.status().cursor }));
   }
   async imageList(id, prepare = false) {
     const item = this.store.item(id);
+    const membership = this.store.membershipCursor(id);
     if (!item.present) throw new Error('条目不在当前收藏夹');
     let sources = this.store.imageSources(id);
     if (!sources && prepare) {
+      this.store.assertPlatform(item.platform);
       sources = await this.services[item.platform].imageSources(item);
       sources = sources.map(source => ({ ...source, url: validateImageUrl(source.url, item.platform) }));
+      this.store.requirePresent(id, membership);
       this.store.saveImageSources(id, sources);
     }
     return (sources ?? []).map((source, index) => ({ index, kind: source.kind, cached: Boolean(this.store.image(id, index)) }));
   }
   async image(id, index, prepare = false) {
     const item = this.store.item(id);
+    const membership = this.store.membershipCursor(id);
     if (!item.present) throw new Error('条目不在当前收藏夹');
     const cached = this.store.image(id, index);
     if (cached) return cached;
@@ -29,14 +34,21 @@ export class PlatformService {
     let source = this.store.imageSources(id)?.[index];
     if (!source) throw new Error('图片索引不存在');
     let image;
+    this.store.assertPlatform(item.platform); this.store.requirePresent(id, membership);
     try { image = await this.download(source.url, item.platform); }
-    catch {
+    catch (error) {
+      recordFailure(this.store, item.platform, error);
+      this.store.assertPlatform(item.platform); this.store.requirePresent(id, membership);
       const sources = (await this.services[item.platform].imageSources(item)).map(s => ({ ...s, url: validateImageUrl(s.url, item.platform) }));
+      this.store.requirePresent(id, membership);
       this.store.saveImageSources(id, sources);
       source = sources[index];
       if (!source) throw new Error('图片索引不存在');
-      image = await this.download(source.url, item.platform);
+      this.store.requirePresent(id, membership); this.store.assertPlatform(item.platform);
+      try { image = await this.download(source.url, item.platform); }
+      catch (error) { recordFailure(this.store, item.platform, error); throw error; }
     }
+    this.store.requirePresent(id, membership);
     this.store.saveImage(id, index, image);
     return image;
   }

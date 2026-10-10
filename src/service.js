@@ -1,3 +1,4 @@
+import { guardedBrowser, checkResponse, recordFailure } from './platform-access.js';
 import { openBrowser, browserApi } from './browser.js';
 import { collectFavorites } from './favorites.js';
 import { transcribeAudio, validateAudioUrl } from './transcribe.js';
@@ -37,34 +38,52 @@ export async function extractContent(api, readSubtitle, item) {
           result.status = 'available';
           result.source = 'platform_subtitles';
         } else result.status = 'no_subtitles';
-      } catch { result.status = 'unavailable'; }
+      } catch (error) { if (error.platformStop) throw error; result.status = 'unavailable'; }
       content.parts.push(result);
     }
     const available = content.parts.filter(part => part.status === 'available').length;
     content.status = available && available === content.parts.length ? 'subtitles_available' : available ? 'partial' : 'metadata_only';
     content.evidence.kind = available ? 'metadata_and_subtitles' : 'metadata';
     return content;
-  } catch {
+  } catch (error) {
+    if (error.platformStop) throw error;
     return { ...content, status: 'metadata_only', reason: '视频详情接口当前不可读取，可重试；未进行音频或画面分析' };
   }
 }
 
 export class FavoriteService {
   constructor(store, folderName = 'myFav', browser = openBrowser, transcribe = transcribeAudio) {
-    this.store = store; this.folderName = folderName; this.browser = browser; this.queue = Promise.resolve();
+    this.platform = 'bilibili'; this.store = store; this.folderName = folderName; this.browser = browser; this.queue = Promise.resolve();
     this.transcribe = transcribe; this.jobs = new Map(); this.transcriptionQueue = Promise.resolve(); this.preparationQueue = Promise.resolve();
   }
   withBrowser(fn) {
     const job = this.queue.then(async () => {
-      const { context, page, close = () => context.close() } = await this.browser(true);
-      try { return await fn(browserApi(page), page); }
-      finally { await close(); }
+      return guardedBrowser(this.store, this.platform, () => this.browser(true), async page => {
+        const api = this.guardedApi(browserApi(page));
+        const scope = this.store.status().scope;
+        if (scope) {
+          const user = await api('/x/web-interface/nav');
+          if (!user.isLogin || String(user.mid) !== String(scope.uid)) checkResponse(401);
+        }
+        return fn(api, page);
+      });
     });
     this.queue = job.catch(() => {});
     return job;
   }
+  withItemBrowser(item, fn) {
+    const membership = this.store.membershipCursor(item.itemId);
+    this.store.requirePresent(item.itemId, membership);
+    return this.withBrowser((...args) => {
+      this.store.requirePresent(item.itemId, membership);
+      return fn(...args);
+    });
+  }
+  guardedApi(api) {
+    return async (...args) => { this.store.assertPlatform(this.platform); return api(...args); };
+  }
   imageSources(item) {
-    return this.withBrowser(async api => {
+    return this.withItemBrowser(item, async api => {
       const video = await api('/x/web-interface/view', { bvid: item.bvid });
       return video.pic ? [{ url: video.pic, kind: 'cover' }] : [];
     });
@@ -87,13 +106,15 @@ export class FavoriteService {
   }
   async content(id) {
     const item = this.store.item(id);
+    const membership = this.store.membershipCursor(id);
     if (!item.present || item.type !== 2 || !item.bvid) return extractContent(null, null, item);
-    const content = this.store.content(id) ?? await this.withBrowser((api, page) => extractContent(api, url => page.evaluate(async url => {
+    const content = this.store.content(id) ?? await this.withItemBrowser(item, (api, page) => extractContent(api, url => page.evaluate(async url => {
       const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(30000) });
-      if (!response.ok) throw new Error('字幕请求失败');
+      if (!response.ok) return { httpStatus: response.status, retryAfter: response.headers.get('retry-after') };
       return response.json();
-    }, url), item));
+    }, url).then(data => { checkResponse(data.httpStatus, data.retryAfter); if (data.httpStatus) throw new Error('字幕请求失败'); return data; }), item));
     content.metadata = { ...content.metadata, ...item, description: content.metadata.description };
+    this.store.requirePresent(id, membership);
     if (content.parts.length) this.store.saveContent(id, content);
     for (const part of content.parts) {
       if (part.status === 'available') continue;
@@ -119,19 +140,25 @@ export class FavoriteService {
     return content;
   }
   startTranscription(item, cid, key) {
+    const membership = this.store.membershipCursor(item.itemId);
     const job = { status: 'transcription_pending' }; this.jobs.set(key, job);
     const work = this.transcriptionQueue.then(async () => {
-      const audioUrl = await this.withBrowser(async api => {
+      this.store.requirePresent(item.itemId, membership); this.store.assertPlatform(this.platform);
+      const audioUrl = await this.withItemBrowser(item, async api => {
+        this.store.requirePresent(item.itemId, membership);
         const media = await api('/x/player/playurl', { bvid: item.bvid, cid, fnval: 16, fnver: 0, fourk: 0 });
         const audio = media.dash?.audio?.[0];
         if (!audio) throw new Error('没有可读取的音轨');
         return validateAudioUrl(audio.baseUrl || audio.base_url);
       });
+      this.store.requirePresent(item.itemId, membership); this.store.assertPlatform(this.platform);
       const result = await this.transcribe(audioUrl);
+      this.store.requirePresent(item.itemId, membership);
       this.store.saveTranscript(item.itemId, cid, result);
       job.status = 'available'; this.jobs.delete(key);
     });
     this.transcriptionQueue = work.catch(error => {
+      recordFailure(this.store, this.platform, error);
       job.status = 'transcription_failed';
       job.reason = transcriptionFailureReason(error);
     });

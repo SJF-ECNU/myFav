@@ -23,7 +23,10 @@ const service = new PlatformService(store, {
 const access = new Access(resolve('.local/access.sqlite'));
 const oauth = await createOAuth();
 const app = createApp(service, { token, access, oauth, allowedHosts, allowedOrigins, rateLimit: Number(process.env.MYFAV_RATE_LIMIT_PER_MINUTE || 60) });
+const cleanup = setInterval(() => store.purgeRemoved(), 60 * 60 * 1000);
+cleanup.unref();
 const listener = app.listen(port, host, () => console.log(`myFav MCP 已启动：http://${host}:${port}/mcp。喵～`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+  clearInterval(cleanup);
   listener.close(async () => { await service.drain(); store.close(); access.close(); });
 });

@@ -43,7 +43,7 @@ test('all platform services release sessions through their owned close function'
   const { XiaohongshuService } = await import('../src/xiaohongshu-service.js');
   for (const Service of [FavoriteService, DouyinService, XiaohongshuService]) {
     let released = 0;
-    const service = new Service({}, 'myFav', async () => ({
+    const service = new Service({ assertPlatform() {}, platformPause() {}, status() { return {}; } }, 'myFav', async () => ({
       context: { close: () => assert.fail('external context closed') }, page: {},
       close: async () => { released++; },
     }));

@@ -9,6 +9,8 @@ export class Store {
     if (path !== ':memory:') chmodSync(path, 0o600);
     this.db.exec(`
       PRAGMA foreign_keys=ON;
+      PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS platform_pauses (platform TEXT PRIMARY KEY, reason TEXT NOT NULL, until_ms INTEGER);
       CREATE TABLE IF NOT EXISTS scope (id INTEGER PRIMARY KEY CHECK(id=1), uid INTEGER, folder_id INTEGER, folder_name TEXT, synced_at TEXT);
       CREATE TABLE IF NOT EXISTS scopes (platform TEXT PRIMARY KEY, uid TEXT NOT NULL, folder_id TEXT NOT NULL, folder_name TEXT NOT NULL, synced_at TEXT);
       CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, data TEXT NOT NULL, present INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', note TEXT NOT NULL DEFAULT '', result TEXT);
@@ -25,9 +27,39 @@ export class Store {
       this.db.exec("ALTER TABLE items ADD COLUMN platform TEXT NOT NULL DEFAULT 'bilibili'");
     }
     this.db.exec("INSERT OR IGNORE INTO scopes SELECT 'bilibili',uid,folder_id,folder_name,synced_at FROM scope");
+    if (!this.db.prepare('PRAGMA table_info(items)').all().some(column => column.name === 'removed_at')) {
+      this.db.exec('ALTER TABLE items ADD COLUMN removed_at INTEGER');
+    }
+    this.db.prepare('UPDATE items SET removed_at=? WHERE present=0 AND removed_at IS NULL').run(Date.now());
+    this.purgeRemoved();
     this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
+  purgeRemoved(platform = null) {
+    for (const table of ['sources', 'contents', 'transcripts', 'image_sources', 'images']) {
+      this.db.prepare(`DELETE FROM ${table} WHERE item_id IN (SELECT id FROM items WHERE present=0 AND removed_at<=? AND (? IS NULL OR platform=?))`).run(Date.now() - 7 * 24 * 60 * 60 * 1000, platform, platform);
+    }
+  }
+  membershipCursor(id) { return this.db.prepare('SELECT MAX(seq) AS cursor FROM events WHERE item_id=?').get(id).cursor; }
+  requirePresent(id, cursor) {
+    const item = this.item(id);
+    if (!item.present || (cursor !== undefined && cursor !== this.membershipCursor(id))) throw new Error('条目不在当前收藏夹');
+    return item;
+  }
+  pausePlatform(platform, reason, until = null) {
+    const prior = this.platformPause(platform);
+    if (prior && prior.until_ms === null) return;
+    this.db.prepare('INSERT INTO platform_pauses VALUES(?,?,?) ON CONFLICT(platform) DO UPDATE SET reason=excluded.reason,until_ms=excluded.until_ms').run(platform, reason, until === null ? null : Math.max(until, prior?.until_ms ?? 0));
+  }
+  platformPause(platform) {
+    const row = this.db.prepare('SELECT * FROM platform_pauses WHERE platform=?').get(platform);
+    return row && (row.until_ms === null || row.until_ms > Date.now()) ? row : null;
+  }
+  assertPlatform(platform) {
+    const pause = this.platformPause(platform);
+    if (pause) { const error = new Error(pause.reason); error.platformStop = true; error.until = pause.until_ms; throw error; }
+  }
+  resumePlatform(platform) { this.db.prepare('DELETE FROM platform_pauses WHERE platform=?').run(platform); }
   close() { this.db.close(); }
   status(platform = 'bilibili') {
     const scope = this.db.prepare('SELECT * FROM scopes WHERE platform=?').get(platform) ?? null;
@@ -44,12 +76,13 @@ export class Store {
     let added = 0;
     this.db.exec('BEGIN IMMEDIATE');
     try {
+      this.purgeRemoved(platform);
       const previous = new Set(this.db.prepare('SELECT id FROM items WHERE present=1 AND platform=?').all(platform).map(row => row.id));
-      this.db.prepare('UPDATE items SET present=0 WHERE platform=?').run(platform);
+      this.db.prepare('UPDATE items SET present=0,removed_at=COALESCE(removed_at,?) WHERE platform=?').run(Date.now(), platform);
       for (const item of folder.items) {
         const id = `${platform === 'bilibili' ? '' : `${platform}:`}${folder.id}:${item.type}:${item.id}`;
         this.db.prepare(`INSERT INTO items(id,data,present,platform) VALUES(?,?,1,?)
-          ON CONFLICT(id) DO UPDATE SET data=excluded.data,present=1`).run(id, JSON.stringify(item), platform);
+          ON CONFLICT(id) DO UPDATE SET data=excluded.data,present=1,removed_at=NULL`).run(id, JSON.stringify(item), platform);
         if (!previous.has(id)) {
           this.db.prepare('INSERT INTO events(item_id,created_at) VALUES(?,?)').run(id, snapshot.syncedAt);
           added++;
@@ -57,6 +90,7 @@ export class Store {
       }
       this.db.prepare(`INSERT INTO scopes VALUES(?,?,?,?,?) ON CONFLICT(platform) DO UPDATE SET
         folder_name=excluded.folder_name,synced_at=excluded.synced_at`).run(platform, String(snapshot.uid), String(folder.id), folder.title, snapshot.syncedAt);
+      this.purgeRemoved(platform);
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     return { added, ...this.status(platform) };
@@ -96,14 +130,14 @@ export class Store {
     return row ? JSON.parse(row.data) : null;
   }
   saveImageSources(id, sources) {
-    this.item(id);
+    this.requirePresent(id);
     this.db.prepare('INSERT INTO image_sources VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET data=excluded.data').run(id, JSON.stringify(sources));
   }
   image(id, index) {
     return this.db.prepare('SELECT mime,data FROM images WHERE item_id=? AND position=?').get(id, index);
   }
   saveImage(id, index, image) {
-    this.item(id);
+    this.requirePresent(id);
     this.db.prepare('INSERT INTO images VALUES(?,?,?,?) ON CONFLICT(item_id,position) DO UPDATE SET mime=excluded.mime,data=excluded.data').run(id, index, image.mime, image.data);
   }
   content(id) {
@@ -111,12 +145,12 @@ export class Store {
     return row ? JSON.parse(row.data) : null;
   }
   saveContent(id, content) {
-    this.item(id);
+    this.requirePresent(id);
     this.db.prepare('INSERT INTO contents VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET data=excluded.data').run(id, JSON.stringify(content));
   }
   source(id) { return this.db.prepare('SELECT url FROM sources WHERE item_id=?').get(id)?.url; }
   saveSource(id, url) {
-    this.item(id);
+    this.requirePresent(id);
     this.db.prepare('INSERT INTO sources VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET url=excluded.url').run(id, url);
   }
   transcript(id, cid) {
@@ -124,7 +158,7 @@ export class Store {
     return row ? JSON.parse(row.data) : null;
   }
   saveTranscript(id, cid, data) {
-    this.item(id);
+    this.requirePresent(id);
     this.db.prepare('INSERT INTO transcripts VALUES(?,?,?) ON CONFLICT(item_id,cid) DO UPDATE SET data=excluded.data').run(id, cid, JSON.stringify(data));
   }
 }

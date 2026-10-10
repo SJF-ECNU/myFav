@@ -1,12 +1,16 @@
+import { checkResponse, checkChallenge } from './platform-access.js';
 import { openSession } from './browser-session.js';
 
 export async function openDouyin(headless = true) {
   const { context, page, close } = await openSession('douyin', headless);
   try {
-    await page.goto('https://www.douyin.com/user/self?showTab=favorite_collection', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const navigation = await page.goto('https://www.douyin.com/user/self?showTab=favorite_collection', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after']);
+    checkChallenge(page);
+    if (!(await context.cookies('https://www.douyin.com')).some(cookie => ['sessionid', 'sessionid_ss'].includes(cookie.name) && cookie.value)) checkResponse(401);
     await page.getByText('收藏夹', { exact: true }).waitFor({ timeout: 30000 });
     return { context, page, close };
-  } catch { await close(); throw new Error('抖音登录或网页当前不可用'); }
+  } catch (error) { await close(); checkChallenge(page); if (error.platformStop) throw error; throw new Error('抖音登录或网页当前不可用'); }
 }
 export function douyinApi(page) {
   let previous = 0;
@@ -16,9 +20,10 @@ export function douyinApi(page) {
     const result = await page.evaluate(async ({ path, params }) => {
       const query = new URLSearchParams({ device_platform: 'webapp', aid: '6383', channel: 'channel_pc_web', ...params });
       const response = await fetch(`${path}?${query}`, { credentials: 'include', signal: AbortSignal.timeout(30000) });
-      if (!response.ok) return { http: response.status };
+      if (!response.ok) return { http: response.status, retryAfter: response.headers.get('retry-after') };
       try { return { body: await response.json() }; } catch { return { invalid: true }; }
     }, { path, params });
+    checkResponse(result.http, result.retryAfter, result.body?.status_msg);
     if (result.http || result.invalid || result.body?.status_code !== 0) throw new Error('抖音接口当前不可用');
     return result.body;
   };
