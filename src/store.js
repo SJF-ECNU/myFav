@@ -10,6 +10,7 @@ export class Store {
     this.db.exec(`
       PRAGMA foreign_keys=ON;
       PRAGMA busy_timeout=5000;
+      CREATE TABLE IF NOT EXISTS platform_pause_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT NOT NULL, time TEXT NOT NULL, http_status INTEGER, stage TEXT NOT NULL, signal TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS platform_pauses (platform TEXT PRIMARY KEY, reason TEXT NOT NULL, until_ms INTEGER);
       CREATE TABLE IF NOT EXISTS scope (id INTEGER PRIMARY KEY CHECK(id=1), uid INTEGER, folder_id INTEGER, folder_name TEXT, synced_at TEXT);
       CREATE TABLE IF NOT EXISTS scopes (platform TEXT PRIMARY KEY, uid TEXT NOT NULL, folder_id TEXT NOT NULL, folder_name TEXT NOT NULL, synced_at TEXT);
@@ -46,9 +47,16 @@ export class Store {
     if (!item.present || (cursor !== undefined && cursor !== this.membershipCursor(id))) throw new Error('条目不在当前收藏夹');
     return item;
   }
-  pausePlatform(platform, reason, until = null) {
+  pausePlatform(platform, reason, until = null, diagnostic = null) {
     const prior = this.platformPause(platform);
     if (prior && prior.until_ms === null) return;
+    if (diagnostic) {
+      const last = this.pauseHistory(platform, 1)[0];
+      if (!last || last.time !== diagnostic.time) {
+        this.db.prepare('INSERT INTO platform_pause_events(platform,time,http_status,stage,signal) VALUES(?,?,?,?,?)').run(platform, diagnostic.time, diagnostic.httpStatus, diagnostic.stage, diagnostic.signal);
+        this.db.exec('DELETE FROM platform_pause_events WHERE seq <= (SELECT COALESCE(MAX(seq),0)-300 FROM platform_pause_events)');
+      }
+    }
     this.db.prepare('INSERT INTO platform_pauses VALUES(?,?,?) ON CONFLICT(platform) DO UPDATE SET reason=excluded.reason,until_ms=excluded.until_ms').run(platform, reason, until === null ? null : Math.max(until, prior?.until_ms ?? 0));
   }
   platformPause(platform) {
@@ -59,6 +67,7 @@ export class Store {
     const pause = this.platformPause(platform);
     if (pause) { const error = new Error(pause.reason); error.platformStop = true; error.until = pause.until_ms; throw error; }
   }
+  pauseHistory(platform, limit = 5) { return this.db.prepare('SELECT time,http_status AS httpStatus,stage,signal FROM platform_pause_events WHERE platform=? ORDER BY seq DESC LIMIT ?').all(platform, limit); }
   resumePlatform(platform) { this.db.prepare('DELETE FROM platform_pauses WHERE platform=?').run(platform); }
   close() { this.db.close(); }
   status(platform = 'bilibili') {

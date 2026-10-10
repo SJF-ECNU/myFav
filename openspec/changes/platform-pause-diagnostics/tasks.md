@@ -1,0 +1,3 @@
+- [x] Implement sanitized stages and bounded durable pause history
+- [x] Test restart, recovery history, deduplication and secret exclusion
+- [ ] Push and deploy after tests; perform one normal sync and inspect evidence

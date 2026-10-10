@@ -31,7 +31,7 @@ export class DouyinService extends FavoriteService {
         const scope = this.store.status('douyin').scope;
         if (scope) {
           const folder = (await listDouyinFolders(api)).find(folder => folder.collects_id_str === scope.folder_id);
-          if (!folder || String(folder.user_id_str) !== String(scope.uid)) checkResponse(401);
+          if (!folder || String(folder.user_id_str) !== String(scope.uid)) checkResponse(0, null, '账号已改变', 'account_check');
         }
         return fn(api, page);
       });
@@ -74,7 +74,7 @@ export class DouyinService extends FavoriteService {
             const r = await fetch(url, { credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(30000) });
             if (!r.ok) return { httpStatus: r.status, retryAfter: r.headers.get('retry-after') }; return r.text();
           }, url);
-          checkResponse(text.httpStatus, text.retryAfter);
+          checkResponse(text.httpStatus, text.retryAfter, '', 'subtitle_download');
           part.subtitles = parseCaptions(text); part.status = 'available'; part.source = 'platform_subtitles';
         } catch (error) { if (error.platformStop) throw error; part.status = 'unavailable'; }
       }

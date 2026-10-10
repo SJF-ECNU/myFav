@@ -63,7 +63,7 @@ export class FavoriteService {
         const scope = this.store.status().scope;
         if (scope) {
           const user = await api('/x/web-interface/nav');
-          if (!user.isLogin || String(user.mid) !== String(scope.uid)) checkResponse(401);
+          if (!user.isLogin || String(user.mid) !== String(scope.uid)) checkResponse(0, null, '账号已改变', 'account_check');
         }
         return fn(api, page);
       });
@@ -112,7 +112,7 @@ export class FavoriteService {
       const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(30000) });
       if (!response.ok) return { httpStatus: response.status, retryAfter: response.headers.get('retry-after') };
       return response.json();
-    }, url).then(data => { checkResponse(data.httpStatus, data.retryAfter); if (data.httpStatus) throw new Error('字幕请求失败'); return data; }), item));
+    }, url).then(data => { checkResponse(data.httpStatus, data.retryAfter, '', 'subtitle_download'); if (data.httpStatus) throw new Error('字幕请求失败'); return data; }), item));
     content.metadata = { ...content.metadata, ...item, description: content.metadata.description };
     this.store.requirePresent(id, membership);
     if (content.parts.length) this.store.saveContent(id, content);

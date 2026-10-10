@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store.js';
-import { platformError, guardedBrowser } from '../src/platform-access.js';
+import { platformError, guardedBrowser, recordFailure, checkResponse } from '../src/platform-access.js';
 import { PlatformService } from '../src/platform-service.js';
 import { FavoriteService, extractContent } from '../src/service.js';
 import { DouyinService } from '../src/douyin-service.js';
@@ -168,4 +168,46 @@ test('removed cache survives restart within retention; expired re-add cannot res
     store.db.prepare('UPDATE items SET removed_at=? WHERE id=?').run(Date.now() - 8 * 24 * 60 * 60 * 1000, id);
     store.apply(snapshot()); assert.equal(store.content(id), null);
   } finally { store.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test('pause diagnostics survive recovery and restart without response secrets', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'myfav-diagnostics-'));
+  let store = new Store(join(dir, 'db'));
+  try {
+    const error = platformError(403, null, 'access denied https://cdn.invalid/?sign=secret Cookie=session-password', 'image_download');
+    recordFailure(store, 'douyin', error);
+    recordFailure(store, 'douyin', error);
+    const row = store.pauseHistory('douyin')[0];
+    assert.equal(row.httpStatus, 403); assert.equal(row.stage, 'image_download');
+    assert.ok(Number.isFinite(Date.parse(row.time)));
+    assert.equal(store.pauseHistory('douyin').length, 1);
+    assert.match(store.platformPause('douyin').reason, /HTTP 403/);
+    assert.throws(() => store.assertPlatform('douyin'), /image_download/);
+    assert.doesNotMatch(JSON.stringify({row, pause:store.platformPause('douyin')}), /secret|password|https:|Cookie|sign=/);
+    store.resumePlatform('douyin'); store.close(); store = new Store(join(dir, 'db'));
+    assert.equal(store.platformPause('douyin'), null);
+    assert.deepEqual(store.pauseHistory('douyin')[0], row);
+    assert.throws(() => checkResponse(0, null, '账号已改变', 'account_check'), error => {
+      assert.equal(error.diagnostic.httpStatus, null); assert.equal(error.diagnostic.signal, 'account_changed'); return true;
+    });
+    const badStage = platformError(401, null, '', 'https://private.invalid/?token=secret');
+    assert.equal(badStage.diagnostic.stage, 'unknown'); assert.doesNotMatch(badStage.message, /secret/);
+  } finally { store.close(); await rm(dir, { recursive:true, force:true }); }
+});
+
+test('pause history stays bounded and HTTP 200 API refusals retain actual status', () => {
+  const store = new Store(':memory:');
+  try {
+    for (let i=0;i<305;i++) {
+      store.resumePlatform('douyin');
+      const error = platformError(200, null, '请先登录 token=secret', 'favorites_api');
+      error.diagnostic.time = new Date(i*1000).toISOString();
+      recordFailure(store, 'douyin', error);
+    }
+    assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM platform_pause_events').get().n,300);
+    assert.equal(store.pauseHistory('douyin')[0].httpStatus,200);
+    assert.equal(store.pauseHistory('douyin')[0].signal,'login_required');
+    assert.doesNotMatch(JSON.stringify(store.pauseHistory('douyin')), /secret/);
+  } finally {store.close();}
 });

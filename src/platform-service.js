@@ -55,7 +55,7 @@ export class PlatformService {
   async content(id) {
     const content = await this.services[this.store.item(id).platform].content(id);
     try { content.images = await this.imageList(id, true); }
-    catch { content.images = []; content.imageStatus = 'unavailable'; }
+    catch (error) { content.images = []; content.imageStatus = 'unavailable'; if (error.platformStop) content.imageReason = error.message; }
     return content;
   }
   cachedContent(id) {

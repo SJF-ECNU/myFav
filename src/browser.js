@@ -1,4 +1,4 @@
-import { checkResponse, checkChallenge } from './platform-access.js';
+import { checkResponse, checkChallenge, requestStage } from './platform-access.js';
 import { openSession } from './browser-session.js';
 import { setTimeout } from 'node:timers/promises';
 
@@ -6,7 +6,7 @@ export async function openBrowser(headless) {
   const { context, page, close } = await openSession('bilibili', headless);
   try {
     const navigation = await page.goto('https://www.bilibili.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
-    if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after']);
+    if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after'], '', 'navigation');
     checkChallenge(page);
     return { context, page, close };
   } catch (error) {
@@ -29,8 +29,8 @@ export function browserApi(page) {
       try { return { body: await response.json() }; }
       catch { return { invalidJson: true }; }
     }, url.href);
-    checkResponse(response.httpStatus, response.retryAfter, response.body?.message);
-    if (response.body?.code === -101) checkResponse(401);
+    checkResponse(response.httpStatus ?? 200, response.retryAfter, response.body?.message, requestStage(path));
+    if (response.body?.code === -101) checkResponse(0, null, '未登录', 'session_check');
     if (response.httpStatus) throw new Error(`Bilibili HTTP ${response.httpStatus}`);
     if (response.invalidJson) throw new Error('Bilibili 返回非 JSON 内容');
     if (response.body.code === -101) throw new Error('登录失效，请运行 npm run login');

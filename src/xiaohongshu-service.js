@@ -18,7 +18,7 @@ export class XiaohongshuService extends FavoriteService {
             const user = value?.value ?? value;
             return user && !user.guest ? user.userId : null;
           });
-          if (String(uid) !== String(scope.uid)) checkResponse(401);
+          if (String(uid) !== String(scope.uid)) checkResponse(0, null, '账号已改变', 'account_check');
         }
         return fn(page);
       });

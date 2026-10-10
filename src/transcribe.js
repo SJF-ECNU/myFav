@@ -26,7 +26,7 @@ export async function transcribeAudio(url, platform = 'bilibili') {
     return { language: result.language, segments: result.segments.map(segment => ({ from: segment.start, to: segment.end, text: segment.text })) };
   } catch (error) {
     const http = (error.stderr ?? '').match(/(?:HTTP error|Server returned)\s+(401|403|412|429)\b/i);
-    if (http) checkResponse(Number(http[1]));
+    if (http) checkResponse(Number(http[1]), null, '', 'audio_download');
     const reason = error.code === 'ENOENT' ? 'command_missing' : /certificate/i.test(error.stderr ?? '') ? 'certificate' : /download|urlopen/i.test(error.stderr ?? '') ? 'model_download' : 'execution';
     throw new Error(`本地转写失败：${stage}/${reason}`);
   } finally { await rm(directory, { recursive: true, force: true }); }

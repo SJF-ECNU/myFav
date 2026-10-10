@@ -9,7 +9,7 @@ export function validateImageUrl(value, platform) {
 }
 export async function downloadImage(url, platform, request = fetch) {
   const response = await request(validateImageUrl(url, platform), { redirect: 'error', signal: AbortSignal.timeout(30000), headers: { Referer: `https://www.${platform === 'xiaohongshu' ? 'xiaohongshu' : platform === 'douyin' ? 'douyin' : 'bilibili'}.com/` } });
-  checkResponse(response.status, response.headers.get('retry-after'));
+  checkResponse(response.status, response.headers.get('retry-after'), '', 'image_download');
   if (!response.ok || Number(response.headers.get('content-length')) > limit) throw new Error('图片下载失败或超过10MiB');
   const chunks = []; let size = 0;
   for await (const chunk of response.body) {

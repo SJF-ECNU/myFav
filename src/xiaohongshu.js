@@ -6,7 +6,7 @@ export async function openXiaohongshu() {
   const { context, page, close } = await openSession('xiaohongshu', true);
   try {
     const navigation = await page.goto('https://www.xiaohongshu.com/explore', { waitUntil: 'domcontentloaded', timeout: 60000 });
-    if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after']);
+    if (navigation) checkResponse(navigation.status(), navigation.headers()['retry-after'], '', 'navigation');
     checkChallenge(page);
     await page.waitForFunction(() => {
       const s = window.__INITIAL_STATE__?.user?.userInfo; const u = s?.value ?? s;
@@ -17,7 +17,7 @@ export async function openXiaohongshu() {
       const user = value?.value ?? value;
       return Boolean(user && !user.guest && user.userId);
     });
-    if (!loggedIn) checkResponse(401);
+    if (!loggedIn) checkResponse(0, null, '未登录', 'session_check');
     return { context, page, close };
   } catch (error) { await close(); checkChallenge(page); if (error.platformStop) throw error; throw new Error('小红书登录或网页当前不可用'); }
 }
@@ -45,9 +45,9 @@ export async function readXhsBoards(page, uid) {
   await page.goto(`https://www.xiaohongshu.com/user/profile/${uid}?tab=fav&subTab=board`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   const r = await response;
   if (r) {
-    checkResponse(r.status?.(), r.headers?.()['retry-after']);
+    checkResponse(r.status?.(), r.headers?.()['retry-after'], '', 'favorites_api');
     const b = await r.json();
-    checkResponse(0, null, b.message || b.msg);
+    checkResponse(r.status?.(), null, b.message || b.msg, 'favorites_api');
     if (b.code !== 0 || !Array.isArray(b.data?.boards) || b.data.boards.length !== b.data.board_count) throw new Error('小红书专辑列表不完整');
     return b.data.boards;
   }
@@ -82,9 +82,9 @@ export async function collectXiaohongshu(page, folderName = 'myFav', expectedUid
     const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/sns/web/v1/board/note', { timeout: 15000 });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const r = await response;
-    checkResponse(r.status?.(), r.headers?.()['retry-after']);
+    checkResponse(r.status?.(), r.headers?.()['retry-after'], '', 'favorites_api');
     const data = await r.json();
-    checkResponse(0, null, data.message || data.msg);
+    checkResponse(r.status?.(), null, data.message || data.msg, 'favorites_api');
     if (data.code !== 0 || !Array.isArray(data.data?.notes)) throw new Error('小红书分页读取失败');
     await page.waitForFunction(({ id, length }) => {
       const m = window.__INITIAL_STATE__.board.boardFeedsMap;

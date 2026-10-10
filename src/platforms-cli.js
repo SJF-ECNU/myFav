@@ -4,5 +4,5 @@ if (!['status', 'resume'].includes(command) || !['bilibili', 'douyin', 'xiaohong
 const store = new Store('.local/myfav.sqlite');
 try {
   if (command === 'resume') store.resumePlatform(platform);
-  console.log(JSON.stringify({ platform, pause: store.platformPause(platform) }) + ' 喵～');
+  console.log(JSON.stringify({ platform, pause: store.platformPause(platform), recentTriggers: store.pauseHistory(platform) }) + ' 喵～');
 } finally { store.close(); }
