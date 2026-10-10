@@ -7,6 +7,7 @@ import { Store } from '../src/store.js';
 import { platformError, guardedBrowser, recordFailure, checkResponse, requestStage } from '../src/platform-access.js';
 import { PlatformService } from '../src/platform-service.js';
 import { FavoriteService, extractContent } from '../src/service.js';
+import { openDouyin } from '../src/douyin.js';
 import { DouyinService } from '../src/douyin-service.js';
 import { XiaohongshuService } from '../src/xiaohongshu-service.js';
 import { downloadImage } from '../src/images.js';
@@ -235,4 +236,31 @@ test('Douyin sync skips only redundant folder lookup and keeps bound owner valid
   assert.equal(requestStage('/aweme/v1/web/collects/list/'),'favorites_folders');
   assert.equal(requestStage('/aweme/v1/web/collects/video/list/'),'favorites_members');
   store.close();
+});
+
+
+test('Douyin visible tab is not ready until native favorites succeeds', async () => {
+  const ready=deferred();let closed=0,returned=false;
+  const page={waitForResponse:()=>ready.promise,goto:async()=>null,getByText:()=>({waitFor:async()=>{}})};
+  const browser=async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}});
+  const opening=openDouyin(true,browser).then(value=>{returned=true;return value;});
+  await new Promise(resolve=>setImmediate(resolve)); assert.equal(returned,false);
+  ready.resolve({status:()=>200,headers:()=>({}),json:async()=>({status_code:0})});
+  const session=await opening;assert.equal(returned,true);assert.equal(closed,0);await session.close();
+});
+
+test('Douyin native readiness refusal closes session and retains HTTP diagnostic', async () => {
+  let closed=0;
+  const page={waitForResponse:async()=>({status:()=>403,headers:()=>({})}),goto:async()=>null,getByText:()=>({waitFor:async()=>{}})};
+  const browser=async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}});
+  await assert.rejects(openDouyin(true,browser),error=>error.diagnostic.httpStatus===403&&error.diagnostic.stage==='page_initialization');
+  assert.equal(closed,1);
+});
+
+test('Douyin readiness timeout closes session without a fake HTTP refusal', async () => {
+  let closed=0;
+  const page={waitForResponse:async()=>{throw new Error('timeout');},goto:async()=>null,getByText:()=>({waitFor:async()=>{}})};
+  const browser=async()=>({page,context:{cookies:async()=>[{name:'sessionid',value:'test-only'}]},close:async()=>{closed++;}});
+  await assert.rejects(openDouyin(true,browser),error=>!error.platformStop);
+  assert.equal(closed,1);
 });

@@ -1,0 +1,3 @@
+- [x] Verify same-session early/native/late comparison
+- [x] Implement native page readiness and tests
+- [ ] Push/deploy and verify normal production sync

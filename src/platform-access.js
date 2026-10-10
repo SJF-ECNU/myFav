@@ -1,4 +1,4 @@
-const stages = new Set(['unknown', 'navigation', 'session_check', 'account_check', 'challenge', 'favorites_api', 'favorites_folders', 'favorites_members', 'detail_api', 'subtitle_download', 'audio_download', 'image_download', 'browser_api']);
+const stages = new Set(['unknown', 'navigation', 'page_initialization', 'session_check', 'account_check', 'challenge', 'favorites_api', 'favorites_folders', 'favorites_members', 'detail_api', 'subtitle_download', 'audio_download', 'image_download', 'browser_api']);
 export function requestStage(path) {
   if (path === '/aweme/v1/web/collects/list/') return 'favorites_folders';
   if (path === '/aweme/v1/web/collects/video/list/') return 'favorites_members';
